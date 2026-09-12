@@ -1,0 +1,89 @@
+name: Java CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['11', '17', '21']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: Compile, test and package
+        run: mvn --batch-mode --no-transfer-progress clean verify
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: qa_database
+          POSTGRES_USER: qa_user
+          POSTGRES_PASSWORD: qa_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U qa_user -d qa_database"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DB_TYPE: postgres
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USER: qa_user
+      DB_PASS: qa_test_password
+      DB_NAME: qa_database
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - run: mvn --batch-mode --no-transfer-progress verify -Pdatabase-integration
+
+  sqlserver-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: 'MindQa_TestOnly_2026!'
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'MindQa_TestOnly_2026!' -C -Q 'SELECT 1' -b"
+          --health-interval=10s --health-timeout=5s --health-retries=30
+    env:
+      DB_TYPE: sqlserver
+      DB_HOST: localhost
+      DB_PORT: '1433'
+      DB_USER: sa
+      DB_PASS: 'MindQa_TestOnly_2026!'
+      DB_NAME: master
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - run: mvn --batch-mode --no-transfer-progress verify -Pdatabase-integration
