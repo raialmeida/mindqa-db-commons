@@ -79,7 +79,6 @@ prefixo e mantenha apenas um `DB_DEFAULT_CONNECTION`; as demais conexões são
 selecionadas pelo nome, como explicado em [conexões e bases diferentes](#conexões-e-bases-diferentes-no-mesmo-teste).
 
 ```properties
-# SQL Server
 DB_DEFAULT_CONNECTION=sqlserver
 SQLSERVER_HOST=localhost
 SQLSERVER_PORT=1433
@@ -98,7 +97,6 @@ MYSQL_NAME=qa_database
 ```
 
 ```properties
-# Oracle: NAME é o service name
 DB_DEFAULT_CONNECTION=oracle
 ORACLE_HOST=localhost
 ORACLE_PORT=1521
