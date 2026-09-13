@@ -34,9 +34,9 @@ de automação, adicione ao `pom.xml`:
 
 ```xml
 <dependency>
-    <groupId>br.com.mindqa</groupId>
+    <groupId>io.github.raialmeida</groupId>
     <artifactId>qa-database-utils</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -671,9 +671,9 @@ JAR usam um timestamp controlado por `project.build.outputTimestamp`.
 
 Artefatos gerados:
 
-- `target/qa-database-utils-1.0.0.jar`: biblioteca com licença MIT no `META-INF`.
-- `target/qa-database-utils-1.0.0-sources.jar`: fontes para navegação na IDE.
-- `target/qa-database-utils-1.0.0-javadoc.jar`: documentação da API.
+- `target/qa-database-utils-1.0.1.jar`: biblioteca com licença MIT no `META-INF`.
+- `target/qa-database-utils-1.0.1-sources.jar`: fontes para navegação na IDE.
+- `target/qa-database-utils-1.0.1-javadoc.jar`: documentação da API.
 
 ### Testes sem servidor de banco
 
