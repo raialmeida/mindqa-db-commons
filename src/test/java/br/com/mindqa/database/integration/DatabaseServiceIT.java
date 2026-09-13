@@ -1,5 +1,6 @@
 package br.com.mindqa.database.integration;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DatabaseServiceIT {
     @Test
     @EnabledIfSystemProperty(named = "db.integration.connections", matches = ".+")
-    void isolatesDifferentConnectionsAndDatabasesInTheSameTest() {
+    void isolatesDifferentConnectionsAndDatabasesInTheSameTest() throws SQLException {
         String[] names = System.getProperty("db.integration.connections").split(",");
         assertTrue(names.length >= 2, "Informe pelo menos duas conexões nomeadas");
         String alternate = System.getProperty("db.integration.alternate", "qa_other");
@@ -42,11 +43,11 @@ class DatabaseServiceIT {
                 assertEquals(target[0] + ":" + target[1], rows.get(0).get("nome"));
             }
         } finally {
-            RuntimeException cleanupFailure = null;
+            SQLException cleanupFailure = null;
             for (String[] target : created) {
                 try {
                     DatabaseService.connection(target[0]).executeUpdateInDb(target[1], "DROP TABLE " + table);
-                } catch (RuntimeException exception) {
+                } catch (SQLException exception) {
                     if (cleanupFailure == null) {
                         cleanupFailure = exception;
                     } else {
@@ -61,7 +62,7 @@ class DatabaseServiceIT {
     }
 
     @Test
-    void executesCrudUsingActualConfiguredDriver() {
+    void executesCrudUsingActualConfiguredDriver() throws SQLException {
         String table = "mindqa_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
         DatabaseService.executeUpdate("CREATE TABLE " + table + " (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
         try {

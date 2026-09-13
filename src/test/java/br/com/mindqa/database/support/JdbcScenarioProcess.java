@@ -11,12 +11,15 @@ import java.sql.DriverManager;
 import java.sql.DriverPropertyInfo;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -24,13 +27,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
-import br.com.mindqa.database.DatabaseException;
 import br.com.mindqa.database.DatabaseClient;
 import br.com.mindqa.database.DatabaseService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -82,6 +83,9 @@ public final class JdbcScenarioProcess {
                 case "statement-error":
                 case "statement-and-close-error":
                 case "close-error":
+                case "statement-update-error":
+                case "statement-update-and-close-error":
+                case "close-update-error":
                     verifyInjectedFailure(action);
                     break;
                 case "parallel":
@@ -134,20 +138,19 @@ public final class JdbcScenarioProcess {
 
     private static void verifySqlFailure(String action) {
         boolean update = "update-error".equals(action);
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+        SQLException exception = assertThrows(SQLException.class, () -> {
             if (update) {
                 update("UPDATE tabela_inexistente SET nome = ?", "novo");
             } else {
                 query("SELECT * FROM tabela_inexistente WHERE id = ?", 1);
             }
         });
-        assertInstanceOf(SQLException.class, exception.getCause());
-        assertTrue(exception.getMessage().contains(update ? "INSERT/UPDATE/DELETE" : "SELECT"));
-        assertTrue(exception.getMessage().contains("qa_default"));
         assertEquals(1, driver.attempts.get());
         if ("connection-error".equals(action) || "changed-config-error".equals(action)) {
-            assertEquals("08001", ((SQLException) exception.getCause()).getSQLState());
+            assertSame(driver.connectionFailure, exception);
+            assertEquals("Falha de conexão simulada", exception.getMessage());
         } else {
+            assertTrue(exception.getMessage().toLowerCase(java.util.Locale.ROOT).contains("tabela_inexistente"));
             assertEquals(1, driver.connections.size());
         }
     }
@@ -159,17 +162,24 @@ public final class JdbcScenarioProcess {
     }
 
     private static void verifyInjectedFailure(String action) {
-        DatabaseException exception = assertThrows(DatabaseException.class,
-                () -> query("SELECT ? AS valor", "parametro-confidencial"));
-        SQLException expected = "close-error".equals(action) ? driver.closeFailure : driver.statementFailure;
-        assertSame(expected, exception.getCause());
-        assertEquals(expected.getSQLState(), exception.getSqlState());
+        SQLException exception = assertThrows(SQLException.class, () -> {
+            if (action.contains("update")) {
+                if (action.startsWith("close-")) {
+                    update("CREATE TABLE teste_fechamento (id INTEGER)");
+                } else {
+                    update("UPDATE clientes SET nome = ?", "parametro-confidencial");
+                }
+            } else {
+                query("SELECT ? AS valor", "parametro-confidencial");
+            }
+        });
+        SQLException expected = action.startsWith("close-") ? driver.closeFailure : driver.statementFailure;
+        assertSame(expected, exception);
+        assertEquals(expected.getSQLState(), exception.getSQLState());
         assertEquals(expected.getErrorCode(), exception.getErrorCode());
-        assertEquals("SELECT", exception.getOperation());
-        assertEquals("qa_default", exception.getDatabase());
+        assertEquals(expected.getMessage(), exception.getMessage());
         assertFalse(exception.getMessage().contains("parametro-confidencial"));
-        assertFalse(exception.getCause().getMessage().contains("parametro-confidencial"));
-        if ("statement-and-close-error".equals(action)) {
+        if (action.contains("and-close-error")) {
             assertEquals(1, expected.getSuppressed().length);
             assertSame(driver.closeFailure, expected.getSuppressed()[0]);
         }
@@ -182,11 +192,12 @@ public final class JdbcScenarioProcess {
             List<Future<?>> calls = new ArrayList<>();
             for (int id = 1; id <= 20; id++) {
                 final int identifier = id;
-                calls.add(executor.submit(() -> {
+                calls.add(executor.submit((Callable<Void>) () -> {
                     assertEquals(1, DatabaseService.executeUpdate(
                             "INSERT INTO paralelo (id, nome) VALUES (?, ?)", identifier, "cliente-" + identifier));
                     assertEquals("cliente-" + identifier, DatabaseService.select(
                             "SELECT nome FROM paralelo WHERE id = ?", identifier).get(0).get("nome"));
+                    return null;
                 }));
             }
             for (Future<?> call : calls) {
@@ -229,7 +240,7 @@ public final class JdbcScenarioProcess {
             List<Future<?>> calls = new ArrayList<>();
             for (String name : NAMED_URLS.keySet()) {
                 DatabaseClient selected = DatabaseService.connection(name);
-                calls.add(executor.submit(() -> {
+                calls.add(executor.submit((Callable<Void>) () -> {
                     selected.executeUpdate("CREATE TABLE isolation (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
                     assertEquals(1, selected.executeUpdate("INSERT INTO isolation VALUES (?, ?)", 1, name));
                     assertEquals(name, selected.select("SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
@@ -242,6 +253,7 @@ public final class JdbcScenarioProcess {
                     assertEquals(name + "2", selected.select("SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
                     assertEquals(1, selected.executeUpdateInDb("shared", "DELETE FROM isolation WHERE id = ?", 1));
                     assertTrue(selected.select("SELECT * FROM isolation").isEmpty());
+                    return null;
                 }));
             }
             for (Future<?> call : calls) {
@@ -263,8 +275,10 @@ public final class JdbcScenarioProcess {
         private final List<Connection> connections = new CopyOnWriteArrayList<>();
         private final List<PreparedStatement> statements = new CopyOnWriteArrayList<>();
         private final AtomicInteger attempts = new AtomicInteger();
-        private final SQLException statementFailure = new SQLException("Falha simulada no statement", "42000", 1234);
+        private final SQLException statementFailure = new SQLIntegrityConstraintViolationException(
+                "Falha simulada no statement", "23000", 1234);
         private final SQLException closeFailure = new SQLException("Falha simulada ao fechar conexão", "08006", 5678);
+        private final SQLException connectionFailure = new SQLException("Falha de conexão simulada", "08001");
 
         private RecordingJdbcDriver(String expectedUrl, String action) {
             this.expectedUrl = expectedUrl;
@@ -301,16 +315,22 @@ public final class JdbcScenarioProcess {
                 }
             }
             if ("connection-error".equals(action) || "changed-config-error".equals(action)) {
-                throw new SQLException("Falha de conexão simulada", "08001");
+                throw connectionFailure;
             }
             Connection connection = new org.h2.Driver().connect(
                     "jdbc:h2:mem:" + memoryDatabase + ";DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE", new Properties());
+            if (action.contains("update")) {
+                try (Statement setup = connection.createStatement()) {
+                    setup.execute("CREATE TABLE clientes (nome VARCHAR(100))");
+                }
+            }
             assertTrue(connection.getAutoCommit());
             connections.add(connection);
             return (Connection) Proxy.newProxyInstance(JdbcScenarioProcess.class.getClassLoader(),
                     new Class<?>[]{Connection.class}, (proxy, method, arguments) -> {
                         Object result = invoke(connection, method, arguments);
-                        if ("close".equals(method.getName()) && action.endsWith("close-error")) {
+                        if ("close".equals(method.getName())
+                                && (action.startsWith("close-") || action.endsWith("close-error"))) {
                             throw closeFailure;
                         }
                         if (result instanceof PreparedStatement) {

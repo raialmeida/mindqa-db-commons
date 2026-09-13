@@ -1,5 +1,6 @@
 package br.com.mindqa.database;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -35,9 +36,9 @@ public final class DatabaseService {
      * @return linhas indexadas pelo nome ou alias das colunas, ou lista vazia
      * @throws IllegalArgumentException se os argumentos ou a configuração forem inválidos
      * @throws IllegalStateException se faltar configuração, a seleção for ambígua ou o arquivo não puder ser lido
-     * @throws DatabaseException se a conexão ou a consulta falhar
+     * @throws SQLException erro original do driver ao conectar, consultar ou fechar a conexão
      */
-    public static List<Map<String, Object>> select(String sql, Object... params) {
+    public static List<Map<String, Object>> select(String sql, Object... params) throws SQLException {
         return DEFAULT_CLIENT.select(sql, params);
     }
 
@@ -50,9 +51,9 @@ public final class DatabaseService {
      * @return linhas indexadas pelo nome ou alias das colunas, ou lista vazia
      * @throws IllegalArgumentException se os argumentos ou a configuração forem inválidos
      * @throws IllegalStateException se faltar configuração, a seleção for ambígua ou o arquivo não puder ser lido
-     * @throws DatabaseException se a conexão ou a consulta falhar
+     * @throws SQLException erro original do driver ao conectar, consultar ou fechar a conexão
      */
-    public static List<Map<String, Object>> selectInDb(String dbName, String sql, Object... params) {
+    public static List<Map<String, Object>> selectInDb(String dbName, String sql, Object... params) throws SQLException {
         return DEFAULT_CLIENT.selectInDb(dbName, sql, params);
     }
 
@@ -64,9 +65,9 @@ public final class DatabaseService {
      * @return quantidade de linhas afetadas, não o ID gerado
      * @throws IllegalArgumentException se os argumentos ou a configuração forem inválidos
      * @throws IllegalStateException se faltar configuração, a seleção for ambígua ou o arquivo não puder ser lido
-     * @throws DatabaseException se a conexão ou a alteração falhar
+     * @throws SQLException erro original do driver ao conectar, alterar ou fechar a conexão
      */
-    public static int executeUpdate(String sql, Object... params) {
+    public static int executeUpdate(String sql, Object... params) throws SQLException {
         return DEFAULT_CLIENT.executeUpdate(sql, params);
     }
 
@@ -79,9 +80,9 @@ public final class DatabaseService {
      * @return quantidade de linhas afetadas, não o ID gerado
      * @throws IllegalArgumentException se os argumentos ou a configuração forem inválidos
      * @throws IllegalStateException se faltar configuração, a seleção for ambígua ou o arquivo não puder ser lido
-     * @throws DatabaseException se a conexão ou a alteração falhar
+     * @throws SQLException erro original do driver ao conectar, alterar ou fechar a conexão
      */
-    public static int executeUpdateInDb(String dbName, String sql, Object... params) {
+    public static int executeUpdateInDb(String dbName, String sql, Object... params) throws SQLException {
         return DEFAULT_CLIENT.executeUpdateInDb(dbName, sql, params);
     }
 }

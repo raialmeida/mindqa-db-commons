@@ -35,9 +35,9 @@ public final class DatabaseClient {
      * @throws IllegalArgumentException se o SQL estiver vazio, o array de parâmetros for nulo
      *                                  ou a configuração for inválida
      * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
-     * @throws DatabaseException se a conexão ou a consulta falhar
+     * @throws SQLException erro original do driver ao conectar, consultar ou fechar a conexão
      */
-    public List<Map<String, Object>> select(String sql, Object... params) {
+    public List<Map<String, Object>> select(String sql, Object... params) throws SQLException {
         return selectInDb(null, sql, params);
     }
 
@@ -51,16 +51,14 @@ public final class DatabaseClient {
      * @throws IllegalArgumentException se o SQL estiver vazio, o array de parâmetros for nulo
      *                                  ou a configuração for inválida
      * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
-     * @throws DatabaseException se a conexão ou a consulta falhar
+     * @throws SQLException erro original do driver ao conectar, consultar ou fechar a conexão
      */
-    public List<Map<String, Object>> selectInDb(String dbName, String sql, Object... params) {
+    public List<Map<String, Object>> selectInDb(String dbName, String sql, Object... params) throws SQLException {
         validateArguments(sql, params);
         DatabaseConfiguration configuration = DatabaseConfigurationLoader.load().forConnection(connectionName);
         JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, dbName);
         try (Connection connection = openConnection(settings)) {
             return createQueryRunner(settings).query(connection, sql, new MapListHandler(), params);
-        } catch (SQLException exception) {
-            throw new DatabaseException("SELECT", settings.databaseName(), exception);
         }
     }
 
@@ -73,9 +71,9 @@ public final class DatabaseClient {
      * @throws IllegalArgumentException se o SQL estiver vazio, o array de parâmetros for nulo
      *                                  ou a configuração for inválida
      * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
-     * @throws DatabaseException se a conexão ou a alteração falhar
+     * @throws SQLException erro original do driver ao conectar, alterar ou fechar a conexão
      */
-    public int executeUpdate(String sql, Object... params) {
+    public int executeUpdate(String sql, Object... params) throws SQLException {
         return executeUpdateInDb(null, sql, params);
     }
 
@@ -89,16 +87,14 @@ public final class DatabaseClient {
      * @throws IllegalArgumentException se o SQL estiver vazio, o array de parâmetros for nulo
      *                                  ou a configuração for inválida
      * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
-     * @throws DatabaseException se a conexão ou a alteração falhar
+     * @throws SQLException erro original do driver ao conectar, alterar ou fechar a conexão
      */
-    public int executeUpdateInDb(String dbName, String sql, Object... params) {
+    public int executeUpdateInDb(String dbName, String sql, Object... params) throws SQLException {
         validateArguments(sql, params);
         DatabaseConfiguration configuration = DatabaseConfigurationLoader.load().forConnection(connectionName);
         JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, dbName);
         try (Connection connection = openConnection(settings)) {
             return createQueryRunner(settings).update(connection, sql, params);
-        } catch (SQLException exception) {
-            throw new DatabaseException("INSERT/UPDATE/DELETE", settings.databaseName(), exception);
         }
     }
 

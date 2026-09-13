@@ -20,7 +20,7 @@ padrão usam arquivos temporários e H2; não exigem um servidor externo.
 | Alteração | Local principal |
 | --- | --- |
 | Contrato público de CRUD e clientes nomeados | `DatabaseService`, `DatabaseClient` e `DatabaseServiceTest` |
-| Diagnóstico de erro JDBC | `DatabaseException` e cenários de falha da API |
+| Propagação de erro JDBC | `DatabaseClient` e cenários de falha da API |
 | Seleção e leitura de arquivos | `DatabaseConfigurationLoader` e seu teste |
 | Seleção de conexão, precedência e captura dos valores | `DatabaseConfiguration` e `DatabaseConfigurationTest` |
 | Validação JDBC, URL ou timeout | `JdbcConnectionSettings` e seu teste |

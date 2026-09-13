@@ -36,7 +36,7 @@ versão no Maven Central, adicione ao `pom.xml` do projeto de automação:
 <dependency>
     <groupId>io.github.raialmeida</groupId>
     <artifactId>qa-database-utils</artifactId>
-    <version>1.0.2</version>
+    <version>2.0.0</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -54,8 +54,9 @@ aberta. Não é necessário configurar servidores que você não utiliza.
 | Oracle | `com.oracle.database.jdbc:ojdbc11:23.26.3.0.0` | `1521` |
 | MySQL | `com.mysql:mysql-connector-j:9.7.0` | `3306` |
 
-Até a publicação de `1.0.2`, use `1.0.1` com seleção explícita do arquivo,
-ou instale `1.0.2` localmente com `mvn clean install`.
+Até a publicação de `2.0.0`, instale esta versão localmente com `mvn clean install`.
+Se estiver usando a versão publicada `1.0.1`, selecione o arquivo de configuração
+explicitamente e consulte a documentação correspondente àquela versão.
 
 ## Início rápido
 
@@ -130,6 +131,7 @@ As variáveis de ambiente prevalecem sobre as mesmas chaves do arquivo carregado
 Outros arquivos `.properties` e arquivos `.env` não são descobertos automaticamente.
 Propriedades JVM como `-Ddb.host` não fornecem credenciais.
 Dentro de um teste, consulte pela API estática:
+Declare `throws SQLException` no método de teste, como nos exemplos completos abaixo.
 
 ```java
 import br.com.mindqa.database.DatabaseService;
@@ -169,6 +171,8 @@ As quatro operações estáticas usam a conexão padrão. O cliente retornado po
 `connection(nome)` oferece as mesmas operações para a conexão escolhida.
 O tipo do banco e as credenciais vêm da configuração, sem parâmetros adicionais
 de tipo nos métodos de consulta.
+As operações de CRUD declaram `throws SQLException`: erros JDBC são entregues
+diretamente pelo driver. Em JUnit, declare `throws SQLException` no método de teste.
 
 `select` retorna uma lista vazia quando não há resultados. Cada mapa representa uma
 linha e usa os nomes ou aliases das colunas como chaves; os valores mantêm os tipos
@@ -370,6 +374,7 @@ uma base diferente com `selectInDb`.
 import br.com.mindqa.database.DatabaseService;
 import org.junit.jupiter.api.Test;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -377,7 +382,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ConsultaMultiplosBancosTest {
     @Test
-    void deveConsultarDuasBasesNoMesmoTeste() {
+    void deveConsultarDuasBasesNoMesmoTeste() throws SQLException {
         String id = "cliente-1";
         String sql = "SELECT email FROM clientes WHERE id = ?";
 
@@ -517,6 +522,7 @@ import br.com.mindqa.database.DatabaseService;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -527,7 +533,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class CadastroClienteTest {
     @Test
-    void deveCadastrarClienteEPersistirDados() {
+    void deveCadastrarClienteEPersistirDados() throws SQLException {
         String nome = "Cliente QA";
         String email = "qa-" + UUID.randomUUID() + "@example.com";
         String corpo = String.format("{\"nome\":\"%s\",\"email\":\"%s\"}", nome, email);
@@ -595,6 +601,7 @@ correspondente ao banco da API.
 import br.com.mindqa.database.DatabaseService;
 import org.junit.jupiter.api.Test;
 
+import java.sql.SQLException;
 import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
@@ -603,7 +610,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ConsultaClienteTest {
     @Test
-    void deveConsultarClienteAtualizado() {
+    void deveConsultarClienteAtualizado() throws SQLException {
         String id = UUID.randomUUID().toString();
         String email = "qa-" + id + "@example.com";
 
@@ -632,7 +639,7 @@ class ConsultaClienteTest {
 ## Conexões, erros e validação
 
 Cada chamada lê e valida sua configuração uma vez, preservando os mesmos valores
-durante a execução e no diagnóstico de erros. As configurações são imutáveis por
+durante a execução. As configurações são imutáveis por
 chamada e os métodos podem ser usados concorrentemente, com conexões independentes.
 
 Cada chamada usa uma conexão independente em auto-commit e a fecha com
@@ -640,31 +647,19 @@ Cada chamada usa uma conexão independente em auto-commit e a fecha com
 compartilhada entre chamadas; cada alteração bem-sucedida é confirmada
 independentemente. O Apache DbUtils gerencia os statements e os result sets.
 
-Falhas JDBC geram `DatabaseException`, uma subclasse de `RuntimeException`, com a
-operação, o banco, o SQLState e o código do driver. A `SQLException` original é
-preservada como causa (`getCause()`), inclusive erros suprimidos no fechamento da
-conexão. A biblioteca não acrescenta o SQL nem os parâmetros à mensagem da exceção.
-A causa mantém o diagnóstico do driver, que pode conter dados do SQL.
-
-```java
-import br.com.mindqa.database.DatabaseException;
-
-try {
-    DatabaseService.select("SELECT id FROM clientes WHERE id = ?", "cliente-1");
-} catch (DatabaseException exception) {
-    String operacao = exception.getOperation();
-    String banco = exception.getDatabase();
-    String sqlState = exception.getSqlState();
-    int codigoDriver = exception.getErrorCode();
-    throw exception;
-}
-```
+Falhas JDBC propagam a `SQLException` original do driver, sem substituí-la por
+uma exceção da biblioteca. A classe, a mensagem, `getSQLState()`, `getErrorCode()`
+e a cadeia de `getNextException()` ficam disponíveis ao consumidor. Se a operação
+e o fechamento falharem, a falha de fechamento estará em `getSuppressed()`.
+A biblioteca não acrescenta o SQL nem os parâmetros à mensagem, mas o próprio
+driver pode incluir informações do comando. Métodos de teste JUnit podem declarar
+`throws SQLException`, sem tratamento manual quando basta deixar o teste falhar.
 
 | Exceção | Situações principais |
 | --- | --- |
 | `IllegalStateException` | Arquivo ausente ou ilegível, campo obrigatório ausente, conexão desconhecida ou seleção ambígua. |
 | `IllegalArgumentException` | SQL ou parâmetros inválidos, nome de conexão inválido, tipo conflitante, porta, host, service name ou timeout inválidos. |
-| `DatabaseException` | Falha JDBC ao conectar, executar SQL ou fechar a conexão. |
+| `SQLException` | Falha JDBC original ao conectar, executar SQL ou fechar a conexão. |
 
 ## Desenvolvimento e testes
 
@@ -678,9 +673,9 @@ JAR usam um timestamp controlado por `project.build.outputTimestamp`.
 
 Artefatos gerados:
 
-- `target/qa-database-utils-1.0.2.jar`: biblioteca com licença MIT no `META-INF`.
-- `target/qa-database-utils-1.0.2-sources.jar`: fontes para navegação na IDE.
-- `target/qa-database-utils-1.0.2-javadoc.jar`: documentação da API.
+- `target/qa-database-utils-2.0.0.jar`: biblioteca com licença MIT no `META-INF`.
+- `target/qa-database-utils-2.0.0-sources.jar`: fontes para navegação na IDE.
+- `target/qa-database-utils-2.0.0-javadoc.jar`: documentação da API.
 
 ### Testes sem servidor de banco
 
@@ -744,7 +739,6 @@ src/
 ├── main/java/br/com/mindqa/database/
 │   ├── DatabaseService.java
 │   ├── DatabaseClient.java
-│   ├── DatabaseException.java
 │   ├── DatabaseConfiguration.java
 │   ├── DatabaseConfigurationLoader.java
 │   ├── JdbcConnectionSettings.java
@@ -770,7 +764,6 @@ src/
 | --- | --- | --- |
 | `DatabaseService` | Fachada para CRUD na conexão padrão e seleção de clientes por nome. | Pública |
 | `DatabaseClient` | Execução de CRUD e ciclo de vida JDBC da conexão selecionada. | Pública |
-| `DatabaseException` | Diagnóstico das falhas JDBC. | Pública |
 | `DatabaseConfigurationLoader` | Seleção e leitura das fontes de configuração. | Restrita ao pacote |
 | `DatabaseConfiguration` | Valores imutáveis, seleção de conexão e precedência das fontes. | Restrita ao pacote |
 | `JdbcConnectionSettings` | Valores JDBC validados, URL, credenciais e timeouts em segundos. | Restrita ao pacote |

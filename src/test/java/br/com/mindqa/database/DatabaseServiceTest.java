@@ -51,7 +51,8 @@ class DatabaseServiceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"statement-error", "statement-and-close-error", "close-error"})
+    @ValueSource(strings = {"statement-error", "statement-and-close-error", "close-error",
+            "statement-update-error", "statement-update-and-close-error", "close-update-error"})
     void preservesDriverExceptionAndResourceCleanup(String action) throws Exception {
         run(environment("DB_TYPE", "postgres"), action, POSTGRES_URL, "-");
     }
