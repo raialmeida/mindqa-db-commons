@@ -19,10 +19,10 @@ padrão usam arquivos temporários e H2; não exigem um servidor externo.
 
 | Alteração | Local principal |
 | --- | --- |
-| Contrato público de CRUD | `DatabaseService` e `DatabaseServiceTest` |
+| Contrato público de CRUD e clientes nomeados | `DatabaseService`, `DatabaseClient` e `DatabaseServiceTest` |
 | Diagnóstico de erro JDBC | `DatabaseException` e cenários de falha da API |
 | Seleção e leitura de arquivos | `DatabaseConfigurationLoader` e seu teste |
-| Precedência e captura dos valores | `DatabaseConfiguration` e testes de configuração |
+| Seleção de conexão, precedência e captura dos valores | `DatabaseConfiguration` e `DatabaseConfigurationTest` |
 | Validação JDBC, URL ou timeout | `JdbcConnectionSettings` e seu teste |
 | Execução de cenários em outra JVM | `src/test/java/.../support` |
 | Comportamento com bancos reais | `src/test/java/.../integration` |
@@ -41,8 +41,9 @@ Mantenha as versões das dependências nas propriedades do `pom.xml`. Surefire e
 Failsafe usam a mesma propriedade de versão. Novas bibliotecas usadas apenas por
 testes precisam de escopo `test`.
 
-Preserve o contrato dos quatro métodos e a prioridade das variáveis de ambiente
-sobre o arquivo. Ao modificar comportamento, adicione ou ajuste os testes do caso
+Preserve o contrato dos quatro métodos de CRUD, a seleção por `connection(nome)` e
+a prioridade das variáveis de ambiente sobre o arquivo. Conexões nomeadas não
+herdam credenciais da raiz ou de outros nomes. Ao modificar comportamento, adicione ou ajuste os testes do caso
 afetado. Refatorações de nomes e organização devem continuar passando na suíte
 existente. Documente qualquer mudança visível ao consumidor.
 
@@ -64,7 +65,7 @@ nome único e a remove ao terminar. `DatabaseServiceIT` deve exercitar o projeto
 como um consumidor, importando somente os tipos públicos.
 
 O [workflow de CI](.github/workflows/ci.yml) verifica JDK 11, 17 e 21 e executa
-integração com PostgreSQL 16 e SQL Server 2022 em containers descartáveis.
+integração com PostgreSQL 16, SQL Server 2022, MySQL 8.4 e Oracle Free em containers descartáveis.
 
 ## Distribuição
 

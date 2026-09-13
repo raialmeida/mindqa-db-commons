@@ -11,28 +11,106 @@ os quatro métodos estáticos de `br.com.mindqa.database.DatabaseService`:
 - `executeUpdate(sql, params)`
 - `executeUpdateInDb(dbName, sql, params)`
 
-O tipo do banco vem da configuração. O consumidor não instancia configurações,
-drivers ou executores. `DatabaseException` é o segundo tipo público e representa
-falhas JDBC com diagnóstico estruturado.
+Os métodos estáticos usam a conexão padrão. `DatabaseService.connection(nome)`
+retorna um `DatabaseClient` com as mesmas quatro operações para um destino nomeado.
+O tipo do banco vem da configuração: SQL Server, PostgreSQL, Oracle ou MySQL.
+O consumidor não instancia configurações, drivers ou executores. `DatabaseException`
+representa falhas JDBC com diagnóstico estruturado.
+
+O código de produção depende de JDBC e Apache DbUtils, sem acoplamento a RestAssured,
+JUnit, TestNG, Cucumber ou ferramentas de interface. Pode ser usado em qualquer
+automação que execute Java 11+ e possua acesso ao banco configurado. As chamadas
+JDBC são síncronas; o framework consumidor define quando e em qual thread executá-las.
+
+## Uso no projeto de automação
+
+O projeto consumidor mantém suas dependências de RestAssured e JUnit e fornece
+as configurações do ambiente. Os métodos de banco não recebem o tipo de servidor;
+o driver é selecionado pelo tipo configurado para a conexão.
+
+No [exemplo de cadastro do README](../README.md#post-cadastrar-pela-api-e-validar-no-banco),
+RestAssured envia `POST /clientes` e valida HTTP `201`. O teste usa o ID retornado
+para consultar o cadastro com `DatabaseService.select`, compara os dados gravados
+com os enviados e limpa o registro com `executeUpdate` em `finally`.
+O cenário pressupõe que a API tenha concluído a gravação antes de responder e que
+a conexão do teste aponte para o mesmo banco da API.
+
+## Configuração por ambiente
+
+`DatabaseConfigurationLoader` seleciona um arquivo usando, nesta ordem,
+`-Ddb.config`, `DB_CONFIG`, `-Ddb.env` ou `DB_ENV`. Os dois primeiros aceitam um
+nome livre no classpath ou um caminho externo; os dois últimos selecionam
+`database-<ambiente>.properties` no classpath. Sem seletor, a configuração usa
+somente variáveis de ambiente.
+
+Para cada chave, `DatabaseConfiguration` prioriza a variável `DB_*` sobre o valor
+do arquivo, inclusive quando a variável está vazia. O arquivo aceita as formas
+`DB_*` e `db.*`, com prioridade para `DB_*`. `JdbcConnectionSettings` aplica os
+padrões e valida os valores resultantes. Nos métodos `*InDb`, um nome de banco
+não vazio substitui `DB_NAME`, mantendo tipo, host, porta e credenciais.
+
+A biblioteca não procura todos os arquivos `.properties` do consumidor. A seleção
+explícita determina a fonte usada em cada ambiente. Os caminhos, exemplos e
+valores padrão estão no [guia de configuração](../README.md#configuração-com-qualquer-arquivo-properties).
+
+### Conexões nomeadas e escolha do padrão
+
+Cada nome usa um namespace próprio: `DB_CONNECTIONS_ERP_*` no ambiente ou
+`db.connections.erp.*` no arquivo. Nenhuma credencial ou opção de conexão é
+herdada da configuração raiz ou de outro nome. Os mesmos critérios de precedência
+valem dentro de cada namespace. Somente a conexão usada pela operação é validada.
+
+Também são aceitos aliases por motor: `ORACLE_*` declara a conexão `oracle` e
+`ORACLE_ERP_*` declara `erp`. O tipo é inferido mesmo sem uma chave `TYPE`.
+`SQLSERVER`, `POSTGRESQL` e `MYSQL` seguem a mesma regra. As formas com pontos e
+minúsculas são aceitas no arquivo. O tipo explícito deve concordar com o prefixo.
+Prefixos que disputem o mesmo nome geram erro, sem escolher pela ordem de um `Set`.
+
+Para um mesmo nome, a precedência é ambiente antes de arquivo e chaves
+`DB_CONNECTIONS_*` antes dos aliases por motor dentro de cada fonte. O seletor
+`DB_DEFAULT_CONNECTION` permanece global, sem receber prefixo do motor.
+
+A escolha explícita em `connection(nome)` prevalece. Nas chamadas estáticas,
+`DB_DEFAULT_CONNECTION`/`db.default.connection` seleciona o padrão. Na ausência
+desse seletor, campos de conexão na raiz preservam o comportamento original;
+sem esses campos, uma única conexão nomeada é selecionada automaticamente.
+Várias conexões sem padrão geram um erro de ambiguidade. Nomes desconhecidos não
+fazem fallback para outro destino.
+
+Nomes são identificadores de configuração, não nomes de bancos nem tipos de driver.
+Isso permite dois destinos PostgreSQL ou Oracle com hosts e credenciais diferentes.
+Eles usam letras ASCII e números, começando com uma letra, para que a conversão
+entre propriedades e variáveis de ambiente seja unívoca.
+
+`connection(nome)` retorna um cliente imutável que guarda somente o nome. Ele não
+abre JDBC nem lê arquivos ao ser criado. A operação carrega uma configuração nova,
+portanto reutilizar o cliente continua observando alterações posteriores no arquivo.
+O cliente padrão da fachada também não guarda configurações ou conexões.
+
+A forma `connection(nome).select(sql, params)` preserva as assinaturas existentes.
+Uma sobrecarga `select(String nome, String sql, Object... params)` entraria em
+conflito com consultas existentes cujo primeiro parâmetro SQL é uma `String`.
 
 ## Responsabilidades e dependências
 
 ```mermaid
 flowchart TD
     Consumer[Projeto de automação] --> Service[DatabaseService]
-    Service --> Loader[DatabaseConfigurationLoader]
+    Service --> Client[DatabaseClient]
+    Client --> Loader[DatabaseConfigurationLoader]
     Loader --> Configuration[DatabaseConfiguration]
-    Service --> Settings[JdbcConnectionSettings]
+    Client --> Settings[JdbcConnectionSettings]
     Settings --> Configuration
-    Service --> JDBC[JDBC e Apache DbUtils]
-    Service --> Error[DatabaseException]
+    Client --> JDBC[JDBC e Apache DbUtils]
+    Client --> Error[DatabaseException]
 ```
 
 | Componente | Responsabilidade | Limite |
 | --- | --- | --- |
-| `DatabaseService` | Validar argumentos, coordenar a chamada e fechar a conexão. | Não lê arquivos nem monta URLs. |
+| `DatabaseService` | Expor operações na conexão padrão e criar clientes por nome. | Não guarda credenciais ou conexões JDBC. |
+| `DatabaseClient` | Validar argumentos, resolver a conexão selecionada e executar CRUD. | Guarda somente um nome; fecha o JDBC após cada operação. |
 | `DatabaseConfigurationLoader` | Selecionar e ler o ambiente, o classpath e o arquivo externo. | Não abre conexões JDBC. |
-| `DatabaseConfiguration` | Preservar os valores das fontes e aplicar a precedência definida. | Não executa I/O e não conhece SQL Server ou PostgreSQL. |
+| `DatabaseConfiguration` | Preservar valores, selecionar o namespace da conexão e aplicar precedência. | Não executa I/O e não conhece os drivers. |
 | `JdbcConnectionSettings` | Validar as opções JDBC, aplicar padrões e montar a URL com escapes. | Não lê arquivos, altera estado global ou executa SQL. |
 | `DatabaseException` | Expor operação, banco, SQLState, código e causa original. | Não acrescenta SQL ou parâmetros à mensagem. |
 
@@ -66,8 +144,10 @@ As pastas seguem o [layout padrão do Maven](https://maven.apache.org/guides/int
 | `.github/workflows` | Validação automática no GitHub Actions. |
 | `target` | Saídas geradas pelo Maven, ignoradas pelo Git. |
 
-Recursos fixos de teste, quando necessários, pertencem a `src/test/resources`.
-Os testes atuais geram arquivos temporários para isolar cenários. Arquivos com
+Recursos fixos de teste pertencem a `src/test/resources`; `database.properties`
+contém exemplos dos quatro motores. Os testes geram arquivos temporários para
+isolar cenários, e os métodos ilustrativos ficam em `src/test/java/.../exemplo`.
+Eles compilam, mas não executam automaticamente. Arquivos com
 credenciais do consumidor pertencem ao projeto consumidor ou ao ambiente de
 execução; eles não são distribuídos no JAR desta biblioteca.
 
@@ -83,15 +163,15 @@ execução; eles não são distribuídos no JAR desta biblioteca.
 - Pacotes em minúsculas, alinhados aos diretórios Java.
 - Documentação e mensagens de uso em português, mantendo os identificadores da API em inglês.
 
-Os nomes públicos `DatabaseService`, `DatabaseException` e dos quatro métodos
+Os nomes públicos `DatabaseService`, `DatabaseClient`, `DatabaseException` e dos métodos
 fazem parte do contrato do consumidor. Refatorações internas devem preservar seus
 pacotes, assinaturas e comportamento.
 
 ## Execução e concorrência
 
-1. A fachada valida SQL e parâmetros antes de realizar I/O.
+1. O cliente valida SQL e parâmetros antes de realizar I/O.
 2. O carregador captura as fontes de configuração para aquela operação.
-3. Os valores JDBC são validados, incluindo o banco informado em `*InDb`.
+3. A configuração resolve a conexão e os valores JDBC são validados, incluindo `*InDb`.
 4. A chamada abre sua conexão e cria um `QueryRunner` com o timeout selecionado.
 5. A operação usa parâmetros preparados e fecha seus recursos.
 6. Em caso de falha, o diagnóstico usa os valores capturados no início da chamada.
@@ -105,16 +185,29 @@ O auto-commit torna cada alteração independente. O dialecto SQL e os tipos dos
 valores de resultado seguem o driver selecionado. O código consumidor permanece
 responsável por preparar e limpar os dados necessários ao teste.
 
+No Oracle, o banco de destino é um service name; `*InDb` troca esse serviço e não
+o schema. A conexão usa JDBC Thin/Easy Connect por TCP. O MySQL usa Connector/J.
+O timeout de conexão usa a propriedade e a unidade de cada driver: `loginTimeout`
+em segundos no SQL Server/PostgreSQL, `oracle.jdbc.loginTimeout` em segundos no
+Oracle e `connectTimeout` em milissegundos no MySQL. Neste último, o limite cobre
+a abertura do socket, não todo o handshake de autenticação.
+
 ## Organização dos testes
 
 | Teste ou auxiliar | Finalidade |
 | --- | --- |
 | `DatabaseConfigurationLoaderTest` | Arquivos, URI, classloader, UTF-8 e captura dos valores. |
+| `DatabaseConfigurationTest` | Seleção padrão/nomeada, isolamento de valores e precedência das fontes. |
 | `JdbcConnectionSettingsTest` | Validação, URLs, parsing com os drivers e timeouts. |
-| `DatabaseServiceTest` | Contrato da API, CRUD, configuração, falhas, recursos e concorrência. |
+| `DatabaseServiceTest` | Contrato da API, clientes nomeados, CRUD, configuração, falhas, recursos e concorrência. |
 | `support.JdbcScenarioRunner` | Iniciar a JVM com ambiente e classpath isolados e conferir sua conclusão. |
 | `support.JdbcScenarioProcess` | Executar o cenário com H2 e um driver de teste instrumentado. |
 | `integration.DatabaseServiceIT` | Executar CRUD contra um servidor real usando somente a API pública. |
+
+Os cenários em JVM isolada verificam quatro conexões simultâneas, duas bases por
+conexão e credenciais distintas. A integração também oferece um cenário opt-in
+com `db.integration.connections` e `db.integration.alternate`, que usa a mesma
+tabela e dados distintos em servidores e bases diferentes no mesmo método de teste.
 
 O sufixo `Test` identifica a suíte padrão. O sufixo `IT` identifica a suíte
 ativada por `database-integration`, seguindo as
@@ -125,7 +218,7 @@ do Maven. As classes em `support` não são testes autônomos nem código de pro
 ## Critérios de evolução
 
 A arquitetura deve evoluir quando houver um requisito verificável: por exemplo,
-mais motores JDBC com comportamentos distintos, múltiplas conexões nomeadas,
+mais motores JDBC com comportamentos distintos,
 transações entre chamadas ou volume de conexões que justifique pooling. Cada
 capacidade precisa definir seu ciclo de vida, isolamento e compatibilidade antes
 de ampliar a API.

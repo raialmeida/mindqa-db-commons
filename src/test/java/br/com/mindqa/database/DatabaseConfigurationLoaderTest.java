@@ -11,13 +11,43 @@ import java.util.Properties;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DatabaseConfigurationLoaderTest {
     @TempDir
     Path directory;
+
+    @ParameterizedTest
+    @CsvSource({"sqlserver,jdbc:sqlserver://,1433", "postgresql,jdbc:postgresql://,5432",
+            "mysql,jdbc:mysql://,3306", "oracle,jdbc:oracle:thin:@//,1521"})
+    void shippedPropertiesConfigureEveryDriverWithoutAnExplicitType(String name, String protocol, String port) throws Exception {
+        DatabaseConfiguration selected = shippedConfiguration().forConnection(name);
+        assertEquals(name, selected.get("DB_TYPE"));
+        JdbcConnectionSettings settings = JdbcConnectionSettings.from(selected, null);
+        assertTrue(settings.jdbcUrl().startsWith(protocol));
+        assertTrue(settings.jdbcUrl().contains(":" + port));
+        assertTrue(java.sql.DriverManager.getDriver(settings.jdbcUrl()).acceptsURL(settings.jdbcUrl()));
+    }
+
+    @Test
+    void shippedPropertiesSelectPostgresAsDefaultAndAllowNamedPasswordOverrides() {
+        assertEquals("postgresql", shippedConfiguration().forConnection(null).get("DB_TYPE"));
+        Properties selectors = new Properties();
+        selectors.setProperty("db.config", "classpath:database.properties");
+        DatabaseConfiguration configuration = DatabaseConfigurationLoader.load(
+                Map.of("ORACLE_PASS", "senha-exclusiva-do-pipeline"), selectors, getClass().getClassLoader());
+        assertEquals("senha-exclusiva-do-pipeline", configuration.forConnection("oracle").get("DB_PASS"));
+        assertEquals("postgresql", configuration.forConnection(null).get("DB_TYPE"));
+    }
+
+    private DatabaseConfiguration shippedConfiguration() {
+        return load("classpath:database.properties");
+    }
 
     @Test
     void loadsUtf8BomAndFileUriWithEncodedSpaces() throws Exception {

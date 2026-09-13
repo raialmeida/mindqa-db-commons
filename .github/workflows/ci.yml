@@ -57,6 +57,120 @@ jobs:
           cache: maven
       - run: mvn --batch-mode --no-transfer-progress verify -Pdatabase-integration
 
+  mysql-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+          MYSQL_DATABASE: qa_database
+          MYSQL_USER: qa_user
+          MYSQL_PASSWORD: qa_test_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      DB_TYPE: mysql
+      DB_HOST: localhost
+      DB_USER: qa_user
+      DB_PASS: qa_test_password
+      DB_NAME: qa_database
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - run: mvn --batch-mode --no-transfer-progress verify -Pdatabase-integration
+
+  oracle-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      oracle:
+        image: gvenzl/oracle-free:23-slim-faststart
+        env:
+          ORACLE_RANDOM_PASSWORD: 'yes'
+          APP_USER: qa_user
+          APP_USER_PASSWORD: qa_test_password
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd=healthcheck.sh
+          --health-interval=10s --health-timeout=5s --health-retries=40
+    env:
+      DB_TYPE: oracle
+      DB_HOST: localhost
+      DB_USER: qa_user
+      DB_PASS: qa_test_password
+      DB_NAME: FREEPDB1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - run: mvn --batch-mode --no-transfer-progress verify -Pdatabase-integration
+
+  multiple-databases-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: qa_database
+          POSTGRES_USER: qa_user
+          POSTGRES_PASSWORD: qa_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U qa_user -d qa_database"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: qa_root_test_password
+          MYSQL_DATABASE: qa_database
+          MYSQL_USER: qa_user
+          MYSQL_PASSWORD: qa_test_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      DB_DEFAULT_CONNECTION: postgresql
+      POSTGRESQL_HOST: localhost
+      POSTGRESQL_USER: qa_user
+      POSTGRESQL_PASS: qa_test_password
+      POSTGRESQL_NAME: qa_database
+      MYSQL_HOST: localhost
+      MYSQL_USER: qa_user
+      MYSQL_PASS: qa_test_password
+      MYSQL_NAME: qa_database
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: Create additional databases in disposable services
+        run: |
+          docker exec "${{ job.services.postgres.id }}" psql -U qa_user -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE qa_other OWNER qa_user;"
+          docker exec -e MYSQL_PWD=qa_root_test_password "${{ job.services.mysql.id }}" mysql -uroot -e "CREATE DATABASE qa_other; GRANT ALL ON qa_other.* TO 'qa_user'@'%';"
+      - name: Verify different connections and databases in one test
+        run: >-
+          mvn --batch-mode --no-transfer-progress verify -Pdatabase-integration
+          -Ddb.integration.connections=postgresql,mysql -Ddb.integration.alternate=qa_other
+
   sqlserver-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20

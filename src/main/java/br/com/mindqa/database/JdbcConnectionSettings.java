@@ -8,7 +8,7 @@ import java.util.Properties;
 /** Valores validados e imutáveis usados durante uma única operação JDBC. */
 final class JdbcConnectionSettings {
     private enum DatabaseType {
-        SQLSERVER(1433), POSTGRESQL(5432);
+        SQLSERVER(1433), POSTGRESQL(5432), ORACLE(1521), MYSQL(3306);
 
         private final int defaultPort;
 
@@ -18,15 +18,17 @@ final class JdbcConnectionSettings {
     }
 
     private final String databaseName;
+    private final DatabaseType databaseType;
     private final String jdbcUrl;
     private final String user;
     private final String password;
     private final int queryTimeoutSeconds;
     private final int loginTimeoutSeconds;
 
-    private JdbcConnectionSettings(String databaseName, String jdbcUrl, String user, String password,
+    private JdbcConnectionSettings(DatabaseType databaseType, String databaseName, String jdbcUrl, String user, String password,
                                    int queryTimeoutSeconds, int loginTimeoutSeconds) {
         this.databaseName = databaseName;
+        this.databaseType = databaseType;
         this.jdbcUrl = jdbcUrl;
         this.user = user;
         this.password = password;
@@ -42,20 +44,38 @@ final class JdbcConnectionSettings {
         String password = configuration.get("DB_PASS");
         if (password == null) {
             throw new IllegalStateException(
-                    "Defina DB_PASS nas variáveis de ambiente ou no arquivo .properties selecionado.");
+                    "Defina " + configuration.key("DB_PASS")
+                            + " nas variáveis de ambiente ou no arquivo .properties selecionado.");
         }
         String database = isBlank(dbName) ? configuration.required("DB_NAME") : dbName.trim();
         if (database.chars().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException("DB_NAME não pode conter caracteres de controle.");
         }
 
-        String url = type == DatabaseType.SQLSERVER
-                ? "jdbc:sqlserver://" + host + ":" + port + ";databaseName="
-                        + escapeSqlServerDatabaseName(database) + ";encrypt=false;"
-                : "jdbc:postgresql://" + host + ":" + port + "/"
+        String url;
+        switch (type) {
+            case SQLSERVER:
+                url = "jdbc:sqlserver://" + host + ":" + port + ";databaseName="
+                        + escapeSqlServerDatabaseName(database) + ";encrypt=false;";
+                break;
+            case ORACLE:
+                if (!database.matches("[a-zA-Z0-9_.$-]+")) {
+                    throw new IllegalArgumentException(configuration.key("DB_NAME")
+                            + " deve conter um service name Oracle com letras, números, _, ., $ ou -.");
+                }
+                url = "jdbc:oracle:thin:@//" + host + ":" + port + "/" + database;
+                break;
+            case MYSQL:
+            case POSTGRESQL:
+                String protocol = type == DatabaseType.MYSQL ? "mysql" : "postgresql";
+                url = "jdbc:" + protocol + "://" + host + ":" + port + "/"
                         + URLEncoder.encode(database, StandardCharsets.UTF_8).replace("+", "%20");
+                break;
+            default:
+                throw new IllegalStateException("Tipo JDBC não implementado.");
+        }
 
-        return new JdbcConnectionSettings(database, url, user, password,
+        return new JdbcConnectionSettings(type, database, url, user, password,
                 parseIntegerProperty(configuration, "DB_QUERY_TIMEOUT_SECONDS", 0, 0, Integer.MAX_VALUE),
                 parseIntegerProperty(configuration, "DB_LOGIN_TIMEOUT_SECONDS", 0, 0, 65535));
     }
@@ -77,7 +97,16 @@ final class JdbcConnectionSettings {
         properties.setProperty("user", user);
         properties.setProperty("password", password);
         if (loginTimeoutSeconds > 0) {
-            properties.setProperty("loginTimeout", Integer.toString(loginTimeoutSeconds));
+            switch (databaseType) {
+                case MYSQL:
+                    properties.setProperty("connectTimeout", Integer.toString(loginTimeoutSeconds * 1000));
+                    break;
+                case ORACLE:
+                    properties.setProperty("oracle.jdbc.loginTimeout", Integer.toString(loginTimeoutSeconds));
+                    break;
+                default:
+                    properties.setProperty("loginTimeout", Integer.toString(loginTimeoutSeconds));
+            }
         }
         return properties;
     }
@@ -92,14 +121,18 @@ final class JdbcConnectionSettings {
             case "postgres":
             case "postgresql":
                 return DatabaseType.POSTGRESQL;
+            case "oracle":
+                return DatabaseType.ORACLE;
+            case "mysql":
+                return DatabaseType.MYSQL;
             default:
-                throw new IllegalArgumentException("DB_TYPE inválido. Use sqlserver, postgres ou postgresql.");
+                throw new IllegalArgumentException("DB_TYPE inválido. Use sqlserver, postgres, postgresql, oracle ou mysql.");
         }
     }
 
     private static String formatHost(String value) {
         if (value.chars().anyMatch(character -> Character.isWhitespace(character)
-                || Character.isISOControl(character) || ";/?#@=\\".indexOf(character) >= 0)) {
+                || Character.isISOControl(character) || ";/?#@=\\,()\"".indexOf(character) >= 0)) {
             throw new IllegalArgumentException("DB_HOST deve conter somente o host ou IP, sem parâmetros JDBC.");
         }
         if (value.contains(":")) {

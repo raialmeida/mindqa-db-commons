@@ -43,7 +43,7 @@ class JdbcConnectionSettingsTest {
 
     @ParameterizedTest
     @CsvSource({"sqlserver,::1,1433", "sqlserver,[::1],1433", "postgres,2001:db8::1,5432",
-            "postgres,[2001:db8::1],5432"})
+            "postgres,[2001:db8::1],5432", "mysql,::1,3306", "oracle,[::1],1521"})
     void normalizesIpv6Address(String type, String host, String port) {
         JdbcConnectionSettings settings = settings(Map.of("DB_TYPE", type, "DB_HOST", host));
         String bareHost = host.replace("[", "").replace("]", "");
@@ -52,7 +52,8 @@ class JdbcConnectionSettingsTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"localhost;user=outro", "localhost/database", "localhost?user=outro",
-            "localhost:5432", "host com espaço", "[localhost]", "host\nquebra"})
+            "localhost:5432", "host com espaço", "[localhost]", "host\nquebra", "host,second-host",
+            "host)(PORT=1234", "host\""})
     void rejectsHostWithJdbcPropertiesOrPort(String host) {
         assertThrows(IllegalArgumentException.class, () -> settings(Map.of("DB_HOST", host)));
     }
@@ -89,6 +90,50 @@ class JdbcConnectionSettingsTest {
     @Test
     void rejectsControlCharactersInDatabaseName() {
         assertThrows(IllegalArgumentException.class, () -> settings(Map.of("DB_NAME", "qa\nforjado")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"qa simples", "qa/second?user=other#fragment", "ação%+&=🧪"})
+    void mysqlDriverPreservesDatabaseAndSeparateCredentials(String database) {
+        JdbcConnectionSettings settings = settings(Map.of("DB_TYPE", "mysql", "DB_NAME", database));
+        com.mysql.cj.conf.ConnectionUrl parsed = com.mysql.cj.conf.ConnectionUrl
+                .getConnectionUrlInstance(settings.jdbcUrl(), settings.connectionProperties());
+        assertEquals(database, parsed.getMainHost().getDatabase());
+        assertEquals("qa_user", parsed.getMainHost().getUser());
+        assertEquals(" senha com espaços ", parsed.getMainHost().getPassword());
+        assertEquals(3306, parsed.getMainHost().getPort());
+        assertEquals(1, parsed.getHostsList().size());
+    }
+
+    @Test
+    void oracleUsesServiceNameAndDriverRecognizesUrl() throws Exception {
+        JdbcConnectionSettings settings = settings(Map.of("DB_TYPE", " ORACLE ", "DB_NAME", "FREEPDB1.example.com"));
+        assertEquals("jdbc:oracle:thin:@//localhost:1521/FREEPDB1.example.com", settings.jdbcUrl());
+        assertTrue(new oracle.jdbc.OracleDriver().acceptsURL(settings.jdbcUrl()));
+        assertEquals("qa_user", settings.connectionProperties().getProperty("user"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"service?user=other", "service/other", "service:dedicated", "(DESCRIPTION=evil)", "service name"})
+    void rejectsOracleServiceNamesThatCouldAlterConnectionDescriptor(String service) {
+        assertThrows(IllegalArgumentException.class, () -> settings(Map.of("DB_TYPE", "oracle", "DB_NAME", service)));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"oracle,oracle.jdbc.loginTimeout,7", "mysql,connectTimeout,7000", "postgres,loginTimeout,7",
+            "sqlserver,loginTimeout,7"})
+    void translatesTimeoutToEachDriversPropertyAndUnit(String type, String property, String value) {
+        int globalTimeout = java.sql.DriverManager.getLoginTimeout();
+        JdbcConnectionSettings settings = settings(Map.of("DB_TYPE", type, "DB_LOGIN_TIMEOUT_SECONDS", "7"));
+        assertEquals(value, settings.connectionProperties().getProperty(property));
+        assertEquals(3, settings.connectionProperties().size());
+        assertEquals(globalTimeout, java.sql.DriverManager.getLoginTimeout());
+    }
+
+    @Test
+    void mysqlMaximumTimeoutDoesNotOverflowMilliseconds() {
+        assertEquals("65535000", settings(Map.of("DB_TYPE", "mysql", "DB_LOGIN_TIMEOUT_SECONDS", "65535"))
+                .connectionProperties().getProperty("connectTimeout"));
     }
 
     private JdbcConnectionSettings settings(Map<String, String> overrides) {

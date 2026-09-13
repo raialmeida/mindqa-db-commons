@@ -117,9 +117,95 @@ class DatabaseServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"DB_TYPE,mysql", "DB_PORT,abc", "DB_PORT,0", "DB_PORT,-1", "DB_PORT,65536"})
+    @CsvSource({"DB_TYPE,unsupported", "DB_PORT,abc", "DB_PORT,0", "DB_PORT,-1", "DB_PORT,65536"})
     void rejectsInvalidConfigurationBeforeOpeningConnection(String key, String value) throws Exception {
         run(environment(key, value), "invalid-config", key, "-");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"mysql,jdbc:mysql://database.test:3306/qa_default",
+            "oracle,jdbc:oracle:thin:@//database.test:1521/qa_default"})
+    void additionalDriversSupportDefaultConnectionCrud(String type, String url) throws Exception {
+        run(environment("DB_TYPE", type), "crud", url, "-");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"mysql,jdbc:mysql://database.test:3306/qa_other",
+            "oracle,jdbc:oracle:thin:@//database.test:1521/qa_other"})
+    void namedClientsSupportCrudAndDatabaseOverrides(String type, String url) throws Exception {
+        Map<String, String> named = new HashMap<>();
+        environment("DB_TYPE", type).forEach((key, value) -> named.put("DB_CONNECTIONS_ERP_" + key.substring(3), value));
+        named.remove("DB_CONNECTIONS_ERP_NAME");
+        run(named, "crud", url, "qa_other", "-Dscenario.connection=erp",
+                "-Dscenario.password=" + named.get("DB_CONNECTIONS_ERP_PASS"));
+    }
+
+    @Test
+    void fourNamedConnectionsAreIsolatedDuringConcurrentCrud() throws Exception {
+        StringBuilder properties = new StringBuilder("db.default.connection=principal\n");
+        String[][] connections = {{"principal", "postgres", "pg.test"}, {"legado", "sqlserver", "sql.test"},
+                {"erp", "oracle", "ora.test"}, {"loja", "mysql", "mysql.test"}};
+        for (String[] connection : connections) {
+            String prefix = "db.connections." + connection[0] + ".";
+            properties.append(prefix).append("type=").append(connection[1]).append('\n')
+                    .append(prefix).append("host=").append(connection[2]).append('\n')
+                    .append(prefix).append("name=shared\n")
+                    .append(prefix).append("user=user_").append(connection[0]).append('\n')
+                    .append(prefix).append("pass=pass_").append(connection[0]).append('\n');
+        }
+        writeProperties("connections.properties", properties.toString());
+        run(Map.of(), "multiple", "-", "-", "-Ddb.config=connections.properties");
+    }
+
+    @Test
+    void fourEnginePrefixedConnectionsWorkTogetherWithoutTypeProperties() throws Exception {
+        StringBuilder properties = new StringBuilder("DB_DEFAULT_CONNECTION=principal\n");
+        String[][] connections = {{"principal", "POSTGRESQL", "pg.test"}, {"legado", "SQLSERVER", "sql.test"},
+                {"erp", "ORACLE", "ora.test"}, {"loja", "MYSQL", "mysql.test"}};
+        for (String[] connection : connections) {
+            String prefix = connection[1] + "_" + connection[0].toUpperCase(java.util.Locale.ROOT) + "_";
+            properties.append(prefix).append("HOST=").append(connection[2]).append('\n')
+                    .append(prefix).append("NAME=shared\n")
+                    .append(prefix).append("USER=user_").append(connection[0]).append('\n')
+                    .append(prefix).append("PASS=pass_").append(connection[0]).append('\n');
+        }
+        writeProperties("typed.properties", properties.toString());
+        run(Map.of(), "multiple", "-", "-", "-Ddb.config=typed.properties");
+    }
+
+    @Test
+    void automaticallyUsesOnlyNamedConnection() throws Exception {
+        writeProperties("connections.properties", properties().replace("DB_", "DB_CONNECTIONS_ONLY_"));
+        run(Map.of(), "crud", POSTGRES_URL, "-", "-Ddb.config=connections.properties", "-Dscenario.password=sênha=ação");
+    }
+
+    @Test
+    void rejectsAmbiguousDefaultBeforeOpeningConnections() throws Exception {
+        run(Map.of("DB_CONNECTIONS_FIRST_TYPE", "oracle", "DB_CONNECTIONS_SECOND_TYPE", "mysql"),
+                "missing-config", "DB_DEFAULT_CONNECTION", "-");
+    }
+
+    @Test
+    void rejectsUnknownNamedConnectionBeforeOpeningConnections() throws Exception {
+        run(environment("DB_TYPE", "postgres"), "missing-config", "não configurada", "-",
+                "-Dscenario.connection=missing");
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "erp-qa", "erp.qa", "erp_qa", "1erp", "ação"})
+    void rejectsInvalidConnectionNames(String name) {
+        assertThrows(IllegalArgumentException.class, () -> DatabaseService.connection(name));
+    }
+
+    @Test
+    void namedClientValidatesArgumentsBeforeLoadingConfiguration() {
+        DatabaseClient client = DatabaseService.connection("notConfigured");
+        assertThrows(IllegalArgumentException.class, () -> client.select(" "));
+        assertThrows(IllegalArgumentException.class, () -> client.selectInDb("qa", null));
+        assertThrows(IllegalArgumentException.class, () -> client.executeUpdate(null));
+        assertThrows(IllegalArgumentException.class, () -> client.executeUpdateInDb("qa", " "));
+        assertThrows(IllegalArgumentException.class, () -> client.select("SELECT 1", (Object[]) null));
     }
 
     @ParameterizedTest

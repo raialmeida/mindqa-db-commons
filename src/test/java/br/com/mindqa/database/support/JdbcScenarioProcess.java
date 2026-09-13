@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 import br.com.mindqa.database.DatabaseException;
+import br.com.mindqa.database.DatabaseClient;
 import br.com.mindqa.database.DatabaseService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,6 +41,12 @@ public final class JdbcScenarioProcess {
     private static RecordingJdbcDriver driver;
     private static String database;
     private static boolean useDatabaseOverride;
+    private static DatabaseClient client;
+    private static final Map<String, String> NAMED_URLS = Map.of(
+            "principal", "jdbc:postgresql://pg.test:5432/shared",
+            "legado", "jdbc:sqlserver://sql.test:1433;databaseName=shared;encrypt=false;",
+            "erp", "jdbc:oracle:thin:@//ora.test:1521/shared",
+            "loja", "jdbc:mysql://mysql.test:3306/shared");
 
     private JdbcScenarioProcess() {
     }
@@ -48,6 +55,8 @@ public final class JdbcScenarioProcess {
         String action = args[0];
         useDatabaseOverride = !"-".equals(args[2]);
         database = "<null>".equals(args[2]) ? null : args[2];
+        String name = System.getProperty("scenario.connection");
+        client = name == null ? null : DatabaseService.connection(name);
 
         // Drivers reais nunca são usados para abrir conexões durante estes testes.
         for (Driver registered : Collections.list(DriverManager.getDrivers())) {
@@ -58,6 +67,9 @@ public final class JdbcScenarioProcess {
 
         try {
             switch (action) {
+                case "multiple":
+                    verifyMultipleConnections();
+                    break;
                 case "crud":
                     verifyCrud();
                     break;
@@ -189,6 +201,9 @@ public final class JdbcScenarioProcess {
 
     private static List<Map<String, Object>> query(String sql, Object... params) throws SQLException {
         try {
+            if (client != null) {
+                return useDatabaseOverride ? client.selectInDb(database, sql, params) : client.select(sql, params);
+            }
             return useDatabaseOverride ? DatabaseService.selectInDb(database, sql, params)
                     : DatabaseService.select(sql, params);
         } finally {
@@ -198,10 +213,47 @@ public final class JdbcScenarioProcess {
 
     private static int update(String sql, Object... params) throws SQLException {
         try {
+            if (client != null) {
+                return useDatabaseOverride ? client.executeUpdateInDb(database, sql, params) : client.executeUpdate(sql, params);
+            }
             return useDatabaseOverride ? DatabaseService.executeUpdateInDb(database, sql, params)
                     : DatabaseService.executeUpdate(sql, params);
         } finally {
             driver.assertConnectionsClosed();
+        }
+    }
+
+    private static void verifyMultipleConnections() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        try {
+            List<Future<?>> calls = new ArrayList<>();
+            for (String name : NAMED_URLS.keySet()) {
+                DatabaseClient selected = DatabaseService.connection(name);
+                calls.add(executor.submit(() -> {
+                    selected.executeUpdate("CREATE TABLE isolation (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
+                    assertEquals(1, selected.executeUpdate("INSERT INTO isolation VALUES (?, ?)", 1, name));
+                    assertEquals(name, selected.select("SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
+                    assertEquals(1, selected.executeUpdate("UPDATE isolation SET nome = ? WHERE id = ?", name + "2", 1));
+                    assertEquals(name + "2", selected.selectInDb("shared", "SELECT nome FROM isolation").get(0).get("nome"));
+                    selected.executeUpdateInDb("other", "CREATE TABLE isolation (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
+                    selected.executeUpdateInDb("other", "INSERT INTO isolation VALUES (?, ?)", 1, "other-" + name);
+                    assertEquals("other-" + name,
+                            selected.selectInDb("other", "SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
+                    assertEquals(name + "2", selected.select("SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
+                    assertEquals(1, selected.executeUpdateInDb("shared", "DELETE FROM isolation WHERE id = ?", 1));
+                    assertTrue(selected.select("SELECT * FROM isolation").isEmpty());
+                }));
+            }
+            for (Future<?> call : calls) {
+                call.get(15, TimeUnit.SECONDS);
+            }
+            DatabaseService.executeUpdate("INSERT INTO isolation VALUES (?, ?)", 2, "default");
+            assertEquals("default", DatabaseService.select("SELECT nome FROM isolation WHERE id = ?", 2).get(0).get("nome"));
+            assertEquals(1, DatabaseService.connection("principal").select("SELECT * FROM isolation").size());
+            assertTrue(DatabaseService.connection("erp").select("SELECT * FROM isolation").isEmpty());
+        } finally {
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
         }
     }
 
@@ -225,10 +277,21 @@ public final class JdbcScenarioProcess {
                 return null;
             }
             attempts.incrementAndGet();
-            assertEquals(expectedUrl, url);
-            assertEquals("qa_user", info.getProperty("user"));
-            assertEquals(System.getProperty("scenario.password", System.getenv("DB_PASS")),
-                    info.getProperty("password"));
+            String memoryDatabase = "qa";
+            if ("multiple".equals(action)) {
+                boolean other = url.endsWith("/other") || url.contains("databaseName=other;");
+                String comparisonUrl = other ? url.replace("/other", "/shared").replace("databaseName=other;", "databaseName=shared;") : url;
+                String name = NAMED_URLS.entrySet().stream().filter(entry -> entry.getValue().equals(comparisonUrl))
+                        .map(Map.Entry::getKey).findFirst().orElseThrow();
+                assertEquals("user_" + name, info.getProperty("user"));
+                assertEquals("pass_" + name, info.getProperty("password"));
+                memoryDatabase = name + (other ? "_other" : "_shared");
+            } else {
+                assertEquals(expectedUrl, url);
+                assertEquals("qa_user", info.getProperty("user"));
+                assertEquals(System.getProperty("scenario.password", System.getenv("DB_PASS")),
+                        info.getProperty("password"));
+            }
             assertEquals(System.getProperty("scenario.loginTimeout"), info.getProperty("loginTimeout"));
             if ("changed-config-error".equals(action)) {
                 try {
@@ -241,7 +304,7 @@ public final class JdbcScenarioProcess {
                 throw new SQLException("Falha de conexão simulada", "08001");
             }
             Connection connection = new org.h2.Driver().connect(
-                    "jdbc:h2:mem:qa;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE", new Properties());
+                    "jdbc:h2:mem:" + memoryDatabase + ";DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE", new Properties());
             assertTrue(connection.getAutoCommit());
             connections.add(connection);
             return (Connection) Proxy.newProxyInstance(JdbcScenarioProcess.class.getClassLoader(),
@@ -292,7 +355,8 @@ public final class JdbcScenarioProcess {
 
         @Override
         public boolean acceptsURL(String url) {
-            return url != null && (url.startsWith("jdbc:sqlserver:") || url.startsWith("jdbc:postgresql:"));
+            return url != null && (url.startsWith("jdbc:sqlserver:") || url.startsWith("jdbc:postgresql:")
+                    || url.startsWith("jdbc:mysql:") || url.startsWith("jdbc:oracle:thin:"));
         }
 
         @Override

@@ -34,7 +34,8 @@ public final class JdbcScenarioRunner {
         command.addAll(Arrays.asList("-cp", classpath,
                 JdbcScenarioProcess.class.getName(), action, expected, database));
         ProcessBuilder builder = new ProcessBuilder(command);
-        builder.environment().keySet().removeIf(key -> key.startsWith("DB_"));
+        builder.environment().keySet().removeIf(key -> key.startsWith("DB_") || key.startsWith("ORACLE_")
+                || key.startsWith("MYSQL_") || key.startsWith("POSTGRESQL_") || key.startsWith("SQLSERVER_"));
         builder.environment().putAll(environment);
         builder.redirectErrorStream(true).redirectOutput(output.toFile());
         Process process = builder.start();
