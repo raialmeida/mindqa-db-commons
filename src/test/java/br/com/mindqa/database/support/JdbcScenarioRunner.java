@@ -22,7 +22,7 @@ public final class JdbcScenarioRunner {
     }
 
     public void run(Map<String, String> environment, String action, String expected,
-                     String database, String... javaOptions) throws Exception {
+            String database, String... javaOptions) throws Exception {
         String executable = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         String classpath = workingDirectory + File.pathSeparator
                 + workingDirectory.resolve("fixtures.jar") + File.pathSeparator
@@ -31,6 +31,16 @@ public final class JdbcScenarioRunner {
         List<String> command = new ArrayList<>();
         command.add(executable);
         command.addAll(Arrays.asList(javaOptions));
+        boolean explicitFile = Arrays.stream(javaOptions).anyMatch(option -> option.startsWith("-Ddb.config=")
+                || option.startsWith("-Ddb.env=")) || environment.containsKey("DB_CONFIG")
+                || environment.containsKey("DB_ENV");
+        if (!explicitFile && !Files.exists(workingDirectory.resolve("database.properties"))) {
+            // O exemplo do projeto está na raiz do classpath; use um arquivo vazio nos
+            // cenários só com DB_*.
+            Path emptyConfiguration = workingDirectory.resolve("empty-database.properties");
+            Files.writeString(emptyConfiguration, "", StandardCharsets.UTF_8);
+            command.add("-Ddb.config=" + emptyConfiguration);
+        }
         command.addAll(Arrays.asList("-cp", classpath,
                 JdbcScenarioProcess.class.getName(), action, expected, database));
         ProcessBuilder builder = new ProcessBuilder(command);

@@ -10,10 +10,16 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Exemplos chamados pelos testes do projeto consumidor; não são executados automaticamente.
- * <p>Selecione o recurso com {@code -Ddb.config=database.properties}. O arquivo de exemplo
- * declara as conexões postgresql, sqlserver, mysql e oracle, com postgresql como padrão.
- * Adapte tabelas, colunas e bases ao ambiente da aplicação.</p>
+ * Exemplos chamados pelos testes do projeto consumidor; não são executados
+ * automaticamente.
+ * <p>
+ * O recurso {@code database.properties} é carregado automaticamente quando está
+ * na raiz
+ * do classpath de testes do projeto consumidor. O arquivo de exemplo
+ * declara as conexões postgresql, sqlserver, mysql e oracle, com postgresql
+ * como padrão.
+ * Adapte tabelas, colunas e bases ao ambiente da aplicação.
+ * </p>
  */
 public final class DatabaseQueryExamples {
     private DatabaseQueryExamples() {
@@ -24,7 +30,9 @@ public final class DatabaseQueryExamples {
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
 
-    /** O ID é gerado pelo teste; o retorno informa a quantidade de linhas inseridas. */
+    /**
+     * O ID é gerado pelo teste; o retorno informa a quantidade de linhas inseridas.
+     */
     public static int cadastrarNovoCliente(String nome, String email) {
         String clienteId = UUID.randomUUID().toString();
         return DatabaseService.executeUpdate(
@@ -49,7 +57,10 @@ public final class DatabaseQueryExamples {
                 nomeComeco + "%", "%" + dominio);
     }
 
-    /** Troca a base dentro do servidor da conexão padrão. No Oracle, troca o service name. */
+    /**
+     * Troca a base dentro do servidor da conexão padrão. No Oracle, troca o service
+     * name.
+     */
     public static List<Map<String, Object>> consultarOutroBancoDaInstancia(String nomeDoBanco, String clienteId) {
         return DatabaseService.selectInDb(nomeDoBanco,
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
@@ -103,7 +114,9 @@ public final class DatabaseQueryExamples {
         }
     }
 
-    /** Prepara, valida e limpa o dado; cada operação confirma sua própria alteração. */
+    /**
+     * Prepara, valida e limpa o dado; cada operação confirma sua própria alteração.
+     */
     public static void testarCadastroComValidacao() {
         DatabaseClient banco = DatabaseService.connection("postgresql");
         String clienteId = UUID.randomUUID().toString();

@@ -23,9 +23,10 @@ class DatabaseConfigurationLoaderTest {
     Path directory;
 
     @ParameterizedTest
-    @CsvSource({"sqlserver,jdbc:sqlserver://,1433", "postgresql,jdbc:postgresql://,5432",
-            "mysql,jdbc:mysql://,3306", "oracle,jdbc:oracle:thin:@//,1521"})
-    void shippedPropertiesConfigureEveryDriverWithoutAnExplicitType(String name, String protocol, String port) throws Exception {
+    @CsvSource({ "sqlserver,jdbc:sqlserver://,1433", "postgresql,jdbc:postgresql://,5432",
+            "mysql,jdbc:mysql://,3306", "oracle,jdbc:oracle:thin:@//,1521" })
+    void shippedPropertiesConfigureEveryDriverWithoutAnExplicitType(String name, String protocol, String port)
+            throws Exception {
         DatabaseConfiguration selected = shippedConfiguration().forConnection(name);
         assertEquals(name, selected.get("DB_TYPE"));
         JdbcConnectionSettings settings = JdbcConnectionSettings.from(selected, null);
@@ -45,6 +46,13 @@ class DatabaseConfigurationLoaderTest {
         assertEquals("postgresql", configuration.forConnection(null).get("DB_TYPE"));
     }
 
+    @Test
+    void shippedDefaultResourceIsLoadedWithoutSelector() {
+        DatabaseConfiguration configuration = DatabaseConfigurationLoader.load(
+                Map.of(), new Properties(), getClass().getClassLoader());
+        assertEquals("postgresql", configuration.forConnection(null).get("DB_TYPE"));
+    }
+
     private DatabaseConfiguration shippedConfiguration() {
         return load("classpath:database.properties");
     }
@@ -61,11 +69,24 @@ class DatabaseConfigurationLoaderTest {
     @Test
     void usesConsumerContextClassLoader() throws Exception {
         Files.writeString(directory.resolve("consumer.properties"), "db.name=consumer_database\n");
-        try (URLClassLoader loader = new URLClassLoader(new URL[]{directory.toUri().toURL()}, null)) {
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { directory.toUri().toURL() }, null)) {
             Properties selectors = new Properties();
             selectors.setProperty("db.config", "classpath:consumer.properties");
             DatabaseConfiguration configuration = DatabaseConfigurationLoader.load(Map.of(), selectors, loader);
             assertEquals("consumer_database", configuration.get("DB_NAME"));
+        }
+    }
+
+    @Test
+    void missingDefaultFileLeavesEnvironmentAvailableAndExplainsMissingConfiguration() throws Exception {
+        try (URLClassLoader loader = new URLClassLoader(new URL[] { directory.toUri().toURL() }, null)) {
+            DatabaseConfiguration configuration = DatabaseConfigurationLoader.load(
+                    Map.of("DB_HOST", "localhost"), new Properties(), loader);
+            assertEquals("localhost", configuration.get("DB_HOST"));
+            IllegalStateException failure = assertThrows(IllegalStateException.class,
+                    () -> JdbcConnectionSettings.from(configuration, null));
+            assertTrue(failure.getMessage().contains("Nenhum arquivo foi selecionado"));
+            assertTrue(failure.getMessage().contains("database.properties"));
         }
     }
 

@@ -7,7 +7,10 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 
-/** Valores imutáveis das fontes de configuração, com precedência do ambiente sobre o arquivo. */
+/**
+ * Valores imutáveis das fontes de configuração, com precedência do ambiente
+ * sobre o arquivo.
+ */
 final class DatabaseConfiguration {
     private static final Set<String> CONNECTION_KEYS = Set.of("DB_TYPE", "DB_HOST", "DB_PORT",
             "DB_USER", "DB_PASS", "DB_NAME", "DB_QUERY_TIMEOUT_SECONDS", "DB_LOGIN_TIMEOUT_SECONDS");
@@ -16,8 +19,13 @@ final class DatabaseConfiguration {
     private final Map<String, String> environment;
     private final String connectionName;
     private final String aliasPrefix;
+    private final boolean noFileSelected;
 
     DatabaseConfiguration(Properties properties, Map<String, String> environment) {
+        this(properties, environment, false);
+    }
+
+    DatabaseConfiguration(Properties properties, Map<String, String> environment, boolean noFileSelected) {
         Map<String, String> snapshot = new HashMap<>();
         for (String key : properties.stringPropertyNames()) {
             snapshot.put(key, properties.getProperty(key));
@@ -26,6 +34,7 @@ final class DatabaseConfiguration {
         this.environment = Map.copyOf(environment);
         this.connectionName = null;
         this.aliasPrefix = null;
+        this.noFileSelected = noFileSelected;
     }
 
     private DatabaseConfiguration(DatabaseConfiguration source, String connectionName, String aliasPrefix) {
@@ -33,6 +42,7 @@ final class DatabaseConfiguration {
         this.environment = source.environment;
         this.connectionName = connectionName;
         this.aliasPrefix = aliasPrefix;
+        this.noFileSelected = source.noFileSelected;
     }
 
     DatabaseConfiguration forConnection(String requestedName) {
@@ -60,7 +70,7 @@ final class DatabaseConfiguration {
         DatabaseConfiguration selected = new DatabaseConfiguration(this, normalizedName, detectedPrefix);
         if (CONNECTION_KEYS.stream().noneMatch(key -> selected.get(key) != null)) {
             throw new IllegalStateException("Conexão '" + normalizedName + "' não configurada. Defina "
-                    + selected.key("DB_TYPE") + " e suas credenciais.");
+                    + selected.key("DB_TYPE") + " e suas credenciais." + selected.missingFileHint());
         }
         return selected;
     }
@@ -104,7 +114,8 @@ final class DatabaseConfiguration {
                         names.add(type.toLowerCase(Locale.ROOT));
                     } else if (normalized.startsWith(type + "_") && normalized.endsWith("_" + suffix)
                             && normalized.length() > type.length() + suffix.length() + 2) {
-                        String name = normalized.substring(type.length() + 1, normalized.length() - suffix.length() - 1);
+                        String name = normalized.substring(type.length() + 1,
+                                normalized.length() - suffix.length() - 1);
                         if (name.matches("[A-Z][A-Z0-9]*")) {
                             names.add(name.toLowerCase(Locale.ROOT));
                         }
@@ -160,9 +171,15 @@ final class DatabaseConfiguration {
         String value = get(key);
         if (value == null || value.trim().isEmpty()) {
             throw new IllegalStateException(
-                    "Defina " + key(key) + " nas variáveis de ambiente ou no arquivo .properties selecionado.");
+                    "Defina " + key(key) + " nas variáveis de ambiente ou no arquivo .properties selecionado."
+                            + missingFileHint());
         }
         return value.trim();
+    }
+
+    String missingFileHint() {
+        return noFileSelected ? " Nenhum arquivo foi selecionado e database.properties não foi encontrado no classpath."
+                : "";
     }
 
     private String findAliasPrefix(String name) {

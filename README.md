@@ -22,21 +22,21 @@ desses frameworks; JUnit e H2 são usados somente nos testes do próprio projeto
 
 Requisitos: JDK 11 ou superior e Maven 3.6.3 ou superior.
 
-No diretório desta biblioteca, execute:
+Para testar alterações locais nesta biblioteca antes de publicá-las, execute:
 
 ```bash
 mvn clean install
 ```
 
 Isso executa os testes e instala no repositório Maven local o JAR da biblioteca,
-o JAR de fontes e o JAR de Javadoc, gerados em `target/`. Nos próximos projetos
-de automação, adicione ao `pom.xml`:
+o JAR de fontes e o JAR de Javadoc, gerados em `target/`. Após publicar esta nova
+versão no Maven Central, adicione ao `pom.xml` do projeto de automação:
 
 ```xml
 <dependency>
     <groupId>io.github.raialmeida</groupId>
     <artifactId>qa-database-utils</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -54,14 +54,14 @@ aberta. Não é necessário configurar servidores que você não utiliza.
 | Oracle | `com.oracle.database.jdbc:ojdbc11:23.26.3.0.0` | `1521` |
 | MySQL | `com.mysql:mysql-connector-j:9.7.0` | `3306` |
 
-Para usar em outra máquina ou no CI, publique o artefato em um repositório Maven da
-equipe (por exemplo, Nexus, Artifactory ou GitHub Packages) e configure esse repositório
-no projeto consumidor. A instalação local não disponibiliza o artefato em outras máquinas.
+Até a publicação de `1.0.2`, use `1.0.1` com seleção explícita do arquivo,
+ou instale `1.0.2` localmente com `mvn clean install`.
 
 ## Início rápido
 
-Depois de instalar a dependência, crie este arquivo no **projeto de automação**:
-`src/test/resources/database.properties`. Substitua os valores pelos do seu ambiente.
+Depois de adicionar a dependência, crie este arquivo no **projeto de automação**:
+`src/test/resources/database.properties`. A biblioteca o carrega automaticamente,
+sem `-Ddb.config`. Substitua os valores pelos do seu ambiente.
 
 ```properties
 DB_DEFAULT_CONNECTION=postgresql
@@ -105,12 +105,30 @@ ORACLE_PASS=sua_senha
 ORACLE_NAME=FREEPDB1
 ```
 
-Selecione o arquivo ao executar os testes:
+Execute os testes normalmente:
 
 ```bash
-mvn test -Ddb.config=database.properties
+mvn test
+```
+### Seleção por ambiente
+
+O arquivo pode ter qualquer nome, por exemplo `ambientes/minha-api-qa.properties`.
+Escolha um arquivo por execução:
+
+```bash
+mvn test -Ddb.config=ambientes/minha-api-qa.properties
+mvn test -Ddb.config=ambientes/minha-api-hml.properties
 ```
 
+Se usar `database-qa.properties` na raiz dos resources, pode selecionar com
+`-Ddb.env=qa` ou `DB_ENV=qa`. A seleção segue `-Ddb.config`, `DB_CONFIG`,
+`-Ddb.env`, `DB_ENV` e, sem seletor explícito, `database.properties` na raiz do
+classpath. Um arquivo explicitamente selecionado que não exista gera erro; o
+arquivo padrão é opcional. Se ele não existir, a biblioteca usa as variáveis de
+ambiente e indica no erro de configuração quando nenhum arquivo foi selecionado.
+As variáveis de ambiente prevalecem sobre as mesmas chaves do arquivo carregado.
+Outros arquivos `.properties` e arquivos `.env` não são descobertos automaticamente.
+Propriedades JVM como `-Ddb.host` não fornecem credenciais.
 Dentro de um teste, consulte pela API estática:
 
 ```java
@@ -228,24 +246,10 @@ Os arquivos são lidos como UTF-8 usando a sintaxe Java Properties. Senhas segue
 as regras de escape do formato Properties e não são aparadas pela biblioteca.
 Também são aceitos arquivos com BOM e chaves em minúsculas separadas por pontos,
 como `oracle.host` e `mysql.pass`. Valores como `${DB_PASS}` não são interpolados.
-O caminho no classpath começa depois de `src/test/resources/`; na IDE, configure
-`-Ddb.config=database.properties` nas opções da JVM. `DB_CONFIG` também seleciona o arquivo.
+O caminho no classpath começa depois de `src/test/resources/`. A IDE também carrega
+`database.properties` automaticamente quando o recurso está no classpath de testes.
+Para escolher outro arquivo, configure `-Ddb.config` nas opções da JVM ou use `DB_CONFIG`.
 
-### Seleção por ambiente
-
-O arquivo pode ter qualquer nome, por exemplo `ambientes/minha-api-qa.properties`.
-Escolha um arquivo por execução:
-
-```bash
-mvn test -Ddb.config=ambientes/minha-api-qa.properties
-mvn test -Ddb.config=ambientes/minha-api-hml.properties
-```
-
-Se usar `database-qa.properties` na raiz dos resources, pode selecionar com
-`-Ddb.env=qa` ou `DB_ENV=qa`. A prioridade dos seletores é `-Ddb.config`, `DB_CONFIG`,
-`-Ddb.env`, `DB_ENV`; seletores em branco são ignorados. Sem seletor, a biblioteca
-usa somente variáveis de ambiente. Arquivos `.properties` e `.env` não são
-carregados automaticamente. Propriedades JVM como `-Ddb.host` não fornecem credenciais.
 
 ### Arquivo externo ou recurso explícito
 
@@ -555,17 +559,20 @@ class CadastroClienteTest {
 }
 ```
 
-Execute usando o arquivo de configuração do ambiente:
-
-```bash
-mvn test -Dtest=CadastroClienteTest -Ddb.config=database.properties
-```
-
-Ou, com as variáveis de conexão já definidas no processo que inicia o Maven:
+Com `database.properties` no classpath do projeto de automação, execute:
 
 ```bash
 mvn test -Dtest=CadastroClienteTest
 ```
+
+Para escolher um arquivo de outro ambiente, informe `-Ddb.config` ou `-Ddb.env`:
+
+```bash
+mvn test -Dtest=CadastroClienteTest -Ddb.env=qa
+```
+
+Se `database.properties` não existir, o primeiro comando também funciona com
+somente as variáveis de conexão no processo que inicia o Maven.
 
 O email único identifica o dado criado por essa execução e facilita a limpeza.
 Em projetos que precisam limpar dados mesmo quando uma asserção falha, mova a
@@ -671,9 +678,9 @@ JAR usam um timestamp controlado por `project.build.outputTimestamp`.
 
 Artefatos gerados:
 
-- `target/qa-database-utils-1.0.1.jar`: biblioteca com licença MIT no `META-INF`.
-- `target/qa-database-utils-1.0.1-sources.jar`: fontes para navegação na IDE.
-- `target/qa-database-utils-1.0.1-javadoc.jar`: documentação da API.
+- `target/qa-database-utils-1.0.2.jar`: biblioteca com licença MIT no `META-INF`.
+- `target/qa-database-utils-1.0.2-sources.jar`: fontes para navegação na IDE.
+- `target/qa-database-utils-1.0.2-javadoc.jar`: documentação da API.
 
 ### Testes sem servidor de banco
 
@@ -699,8 +706,18 @@ tabelas, e execute:
 mvn clean verify -Pdatabase-integration -Ddb.config=config/qa.properties
 ```
 
-Também é possível usar somente as variáveis `DB_*`. Execute para cada tipo desejado:
-`postgres`, `sqlserver`, `oracle` ou `mysql`. O teste usa uma tabela com nome
+Também é possível usar as variáveis `DB_*`. Como este projeto mantém um
+`database.properties` com `DB_DEFAULT_CONNECTION=postgresql` no classpath,
+defina `DB_DEFAULT_CONNECTION` como vazio para selecionar a configuração raiz
+`DB_*` nos testes de integração de um único motor. O workflow CI já faz isso.
+Com `DB_TYPE`, `DB_HOST`, `DB_USER`, `DB_PASS` e `DB_NAME` definidos no ambiente:
+
+```bash
+DB_DEFAULT_CONNECTION='' mvn clean verify -Pdatabase-integration
+```
+
+Execute para cada tipo desejado: `postgres`, `sqlserver`, `oracle` ou `mysql`.
+O teste usa uma tabela com nome
 único, verifica CRUD e os métodos `*InDb`, e remove a tabela ao terminar.
 
 Para testar isolamento entre duas conexões e duas bases por conexão na mesma

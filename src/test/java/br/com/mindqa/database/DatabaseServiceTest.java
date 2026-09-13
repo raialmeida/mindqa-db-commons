@@ -340,9 +340,35 @@ class DatabaseServiceTest {
     }
 
     @Test
-    void doesNotAutomaticallyLoadUnselectedProperties() throws Exception {
+    void automaticallyLoadsDatabasePropertiesFromConsumerClasspath() throws Exception {
+        writeProperties("database.properties", properties());
+        run(Map.of(), "crud", POSTGRES_URL, "-", "-Dscenario.password=sênha=ação");
+    }
+
+    @Test
+    void explicitProfileTakesPrecedenceOverDefaultProperties() throws Exception {
         writeProperties("database.properties", "DB_TYPE=invalid\n");
-        run(environment("DB_TYPE", null), "crud", SQLSERVER_URL, "-");
+        writeProperties("database-qa.properties", properties());
+        run(Map.of(), "crud", POSTGRES_URL, "-", "-Ddb.env=qa", "-Dscenario.password=sênha=ação");
+    }
+
+    @Test
+    void environmentOverridesAutomaticallyLoadedDefaultProperties() throws Exception {
+        writeProperties("database.properties", properties().replace("DB_HOST=database.test", "DB_HOST=wrong-host"));
+        run(Map.of("DB_HOST", "database.test"), "crud", POSTGRES_URL, "-",
+                "-Dscenario.password=sênha=ação");
+    }
+
+    @Test
+    void explicitMissingFileDoesNotFallBackToDefaultProperties() throws Exception {
+        writeProperties("database.properties", properties());
+        run(Map.of(), "file-error", "missing.properties", "-", "-Ddb.config=missing.properties");
+    }
+
+    @Test
+    void invalidDefaultPropertiesAreReportedInsteadOfIgnored() throws Exception {
+        writeProperties("database.properties", "DB_TYPE=invalid\n");
+        run(Map.of(), "invalid-config", "DB_TYPE", "-");
     }
 
     @ParameterizedTest

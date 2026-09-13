@@ -31,7 +31,7 @@ o driver é selecionado pelo tipo configurado para a conexão.
 No [exemplo de cadastro do README](../README.md#post-cadastrar-pela-api-e-validar-no-banco),
 RestAssured envia `POST /clientes` e valida HTTP `201`. O teste usa o ID retornado
 para consultar o cadastro com `DatabaseService.select`, compara os dados gravados
-com os enviados e limpa o registro com `executeUpdate` em `finally`.
+com os enviados e demonstra a limpeza do registro com `executeUpdate`.
 O cenário pressupõe que a API tenha concluído a gravação antes de responder e que
 a conexão do teste aponte para o mesmo banco da API.
 
@@ -40,8 +40,10 @@ a conexão do teste aponte para o mesmo banco da API.
 `DatabaseConfigurationLoader` seleciona um arquivo usando, nesta ordem,
 `-Ddb.config`, `DB_CONFIG`, `-Ddb.env` ou `DB_ENV`. Os dois primeiros aceitam um
 nome livre no classpath ou um caminho externo; os dois últimos selecionam
-`database-<ambiente>.properties` no classpath. Sem seletor, a configuração usa
-somente variáveis de ambiente.
+`database-<ambiente>.properties` no classpath. Sem seletor explícito, procura
+`database.properties` na raiz do classpath. A ausência desse recurso permite
+configuração somente por variáveis de ambiente e é indicada quando falta uma
+chave obrigatória. Arquivos explicitamente selecionados devem existir.
 
 Para cada chave, `DatabaseConfiguration` prioriza a variável `DB_*` sobre o valor
 do arquivo, inclusive quando a variável está vazia. O arquivo aceita as formas
@@ -49,8 +51,9 @@ do arquivo, inclusive quando a variável está vazia. O arquivo aceita as formas
 padrões e valida os valores resultantes. Nos métodos `*InDb`, um nome de banco
 não vazio substitui `DB_NAME`, mantendo tipo, host, porta e credenciais.
 
-A biblioteca não procura todos os arquivos `.properties` do consumidor. A seleção
-explícita determina a fonte usada em cada ambiente. Os caminhos, exemplos e
+A biblioteca não procura todos os arquivos `.properties` do consumidor. A convenção
+automática vale apenas para `database.properties`; a seleção explícita determina
+outros recursos usados em cada ambiente. Os caminhos, exemplos e
 valores padrão estão no [guia de configuração](../README.md#configuração-com-qualquer-arquivo-properties).
 
 ### Conexões nomeadas e escolha do padrão
@@ -144,9 +147,11 @@ As pastas seguem o [layout padrão do Maven](https://maven.apache.org/guides/int
 | `.github/workflows` | Validação automática no GitHub Actions. |
 | `target` | Saídas geradas pelo Maven, ignoradas pelo Git. |
 
-Recursos fixos de teste pertencem a `src/test/resources`; `database.properties`
-contém exemplos dos quatro motores. Os testes geram arquivos temporários para
-isolar cenários, e os métodos ilustrativos ficam em `src/test/java/.../exemplo`.
+Recursos fixos de teste pertencem a `src/test/resources`;
+`database.properties` contém exemplos dos quatro motores e é carregado quando não
+há seletor explícito. Os testes que validam apenas variáveis de ambiente usam uma
+configuração vazia isolada. Os métodos ilustrativos ficam em
+`src/test/java/.../exemplo`.
 Eles compilam, mas não executam automaticamente. Arquivos com
 credenciais do consumidor pertencem ao projeto consumidor ou ao ambiente de
 execução; eles não são distribuídos no JAR desta biblioteca.

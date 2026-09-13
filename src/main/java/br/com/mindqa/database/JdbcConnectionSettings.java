@@ -25,8 +25,9 @@ final class JdbcConnectionSettings {
     private final int queryTimeoutSeconds;
     private final int loginTimeoutSeconds;
 
-    private JdbcConnectionSettings(DatabaseType databaseType, String databaseName, String jdbcUrl, String user, String password,
-                                   int queryTimeoutSeconds, int loginTimeoutSeconds) {
+    private JdbcConnectionSettings(DatabaseType databaseType, String databaseName, String jdbcUrl, String user,
+            String password,
+            int queryTimeoutSeconds, int loginTimeoutSeconds) {
         this.databaseName = databaseName;
         this.databaseType = databaseType;
         this.jdbcUrl = jdbcUrl;
@@ -45,7 +46,8 @@ final class JdbcConnectionSettings {
         if (password == null) {
             throw new IllegalStateException(
                     "Defina " + configuration.key("DB_PASS")
-                            + " nas variáveis de ambiente ou no arquivo .properties selecionado.");
+                            + " nas variáveis de ambiente ou no arquivo .properties selecionado."
+                            + configuration.missingFileHint());
         }
         String database = isBlank(dbName) ? configuration.required("DB_NAME") : dbName.trim();
         if (database.chars().anyMatch(Character::isISOControl)) {
@@ -126,7 +128,8 @@ final class JdbcConnectionSettings {
             case "mysql":
                 return DatabaseType.MYSQL;
             default:
-                throw new IllegalArgumentException("DB_TYPE inválido. Use sqlserver, postgres, postgresql, oracle ou mysql.");
+                throw new IllegalArgumentException(
+                        "DB_TYPE inválido. Use sqlserver, postgres, postgresql, oracle ou mysql.");
         }
     }
 
@@ -137,7 +140,8 @@ final class JdbcConnectionSettings {
         }
         if (value.contains(":")) {
             String address = value.startsWith("[") && value.endsWith("]")
-                    ? value.substring(1, value.length() - 1) : value;
+                    ? value.substring(1, value.length() - 1)
+                    : value;
             if (!address.matches("[0-9a-fA-F:.]+")) {
                 throw new IllegalArgumentException("DB_HOST inválido. Configure a porta separadamente em DB_PORT.");
             }
@@ -154,7 +158,7 @@ final class JdbcConnectionSettings {
     }
 
     private static int parseIntegerProperty(DatabaseConfiguration configuration, String key,
-                                            int defaultValue, int minimum, int maximum) {
+            int defaultValue, int minimum, int maximum) {
         String value = configuration.get(key);
         if (isBlank(value)) {
             return defaultValue;
@@ -167,7 +171,8 @@ final class JdbcConnectionSettings {
         } catch (NumberFormatException ignored) {
             // A mensagem abaixo descreve o campo sem expor seu valor.
         }
-        throw new IllegalArgumentException(key + " deve ser um número inteiro entre " + minimum + " e " + maximum + ".");
+        throw new IllegalArgumentException(
+                key + " deve ser um número inteiro entre " + minimum + " e " + maximum + ".");
     }
 
     private static boolean isBlank(String value) {

@@ -42,6 +42,7 @@ jobs:
           --health-cmd="pg_isready -U qa_user -d qa_database"
           --health-interval=5s --health-timeout=5s --health-retries=20
     env:
+      DB_DEFAULT_CONNECTION: ''
       DB_TYPE: postgres
       DB_HOST: localhost
       DB_PORT: '5432'
@@ -74,6 +75,7 @@ jobs:
           --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
           --health-interval=5s --health-timeout=5s --health-retries=30
     env:
+      DB_DEFAULT_CONNECTION: ''
       DB_TYPE: mysql
       DB_HOST: localhost
       DB_USER: qa_user
@@ -104,6 +106,7 @@ jobs:
           --health-cmd=healthcheck.sh
           --health-interval=10s --health-timeout=5s --health-retries=40
     env:
+      DB_DEFAULT_CONNECTION: ''
       DB_TYPE: oracle
       DB_HOST: localhost
       DB_USER: qa_user
@@ -187,6 +190,7 @@ jobs:
           --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'MindQa_TestOnly_2026!' -C -Q 'SELECT 1' -b"
           --health-interval=10s --health-timeout=5s --health-retries=30
     env:
+      DB_DEFAULT_CONNECTION: ''
       DB_TYPE: sqlserver
       DB_HOST: localhost
       DB_PORT: '1433'

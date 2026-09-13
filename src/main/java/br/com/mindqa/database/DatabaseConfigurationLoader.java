@@ -11,8 +11,13 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Properties;
 
-/** Lê as fontes selecionadas e cria a configuração de uma operação. */
+/**
+ * Lê o arquivo selecionado ou o recurso padrão e cria a configuração de uma
+ * operação.
+ */
 final class DatabaseConfigurationLoader {
+    private static final String DEFAULT_RESOURCE = "database.properties";
+
     private DatabaseConfigurationLoader() {
     }
 
@@ -22,7 +27,7 @@ final class DatabaseConfigurationLoader {
     }
 
     static DatabaseConfiguration load(Map<String, String> environment, Properties systemProperties,
-                                      ClassLoader classLoader) {
+            ClassLoader classLoader) {
         Map<String, String> snapshot = Map.copyOf(environment);
         String location = selector("db.config", "DB_CONFIG", snapshot, systemProperties);
         if (location == null) {
@@ -32,26 +37,36 @@ final class DatabaseConfigurationLoader {
             }
         }
 
-        Properties properties = new Properties();
-        if (location != null) {
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(open(location, classLoader), StandardCharsets.UTF_8))) {
-                reader.mark(1);
-                if (reader.read() != '\uFEFF') {
-                    reader.reset();
-                }
-                properties.load(reader);
-            } catch (IOException | IllegalArgumentException exception) {
-                throw new IllegalStateException(
-                        "Não foi possível carregar o arquivo de configuração '" + location
-                                + "'. Verifique db.config/DB_CONFIG ou db.env/DB_ENV.", exception);
-            }
+        boolean explicitSelection = location != null;
+        if (!explicitSelection) {
+            location = "classpath:" + DEFAULT_RESOURCE;
         }
-        return new DatabaseConfiguration(properties, snapshot);
+
+        Properties properties = new Properties();
+        try {
+            InputStream input = explicitSelection ? open(location, classLoader)
+                    : openDefaultResource(classLoader);
+            if (input != null) {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                    reader.mark(1);
+                    if (reader.read() != '\uFEFF') {
+                        reader.reset();
+                    }
+                    properties.load(reader);
+                }
+            }
+            return new DatabaseConfiguration(properties, snapshot, input == null);
+        } catch (IOException | IllegalArgumentException exception) {
+            throw new IllegalStateException(
+                    "Não foi possível carregar o arquivo de configuração '" + location
+                            + "'. Verifique db.config/DB_CONFIG, db.env/DB_ENV ou database.properties.",
+                    exception);
+        }
     }
 
     private static String selector(String property, String variable, Map<String, String> environment,
-                                   Properties systemProperties) {
+            Properties systemProperties) {
         String value = systemProperties.getProperty(property);
         if (value == null || value.trim().isEmpty()) {
             value = environment.get(variable);
@@ -80,10 +95,7 @@ final class DatabaseConfigurationLoader {
         if (resourceName.isEmpty() || resourceName.endsWith("/")) {
             throw new IOException("Informe o caminho de um arquivo .properties.");
         }
-        InputStream stream = contextLoader == null ? null : contextLoader.getResourceAsStream(resourceName);
-        if (stream == null) {
-            stream = DatabaseConfigurationLoader.class.getClassLoader().getResourceAsStream(resourceName);
-        }
+        InputStream stream = openClasspathResource(resourceName, contextLoader);
         if (stream != null) {
             return stream;
         }
@@ -91,6 +103,17 @@ final class DatabaseConfigurationLoader {
             throw new IOException("Recurso .properties não encontrado no classpath: " + resourceName);
         }
         return openFile(Path.of(location));
+    }
+
+    private static InputStream openClasspathResource(String resourceName, ClassLoader contextLoader) {
+        InputStream stream = contextLoader == null ? null : contextLoader.getResourceAsStream(resourceName);
+        return stream != null ? stream
+                : DatabaseConfigurationLoader.class.getClassLoader().getResourceAsStream(resourceName);
+    }
+
+    private static InputStream openDefaultResource(ClassLoader contextLoader) {
+        return contextLoader == null ? DatabaseConfigurationLoader.class.getClassLoader()
+                .getResourceAsStream(DEFAULT_RESOURCE) : contextLoader.getResourceAsStream(DEFAULT_RESOURCE);
     }
 
     private static InputStream openFile(Path path) throws IOException {
