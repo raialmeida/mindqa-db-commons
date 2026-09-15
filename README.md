@@ -38,7 +38,7 @@ versão no Maven Central, adicione ao `pom.xml` do projeto de automação:
 <dependency>
     <groupId>io.github.raialmeida</groupId>
     <artifactId>qa-database-utils</artifactId>
-    <version>2.0.0</version>
+    <version>2.0.1</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -56,7 +56,7 @@ aberta. Não é necessário configurar servidores que você não utiliza.
 | Oracle | `com.oracle.database.jdbc:ojdbc11:23.26.3.0.0` | `1521` |
 | MySQL | `com.mysql:mysql-connector-j:9.7.0` | `3306` |
 
-Até a publicação de `2.0.0`, instale esta versão localmente com `mvn clean install`.
+Até a publicação de `2.0.1`, instale esta versão localmente com `mvn clean install`.
 Se estiver usando a versão publicada `1.0.1`, selecione o arquivo de configuração
 explicitamente e consulte a documentação correspondente àquela versão.
 
@@ -675,9 +675,9 @@ JAR usam um timestamp controlado por `project.build.outputTimestamp`.
 
 Artefatos gerados:
 
-- `target/qa-database-utils-2.0.0.jar`: biblioteca com licença MIT no `META-INF`.
-- `target/qa-database-utils-2.0.0-sources.jar`: fontes para navegação na IDE.
-- `target/qa-database-utils-2.0.0-javadoc.jar`: documentação da API.
+- `target/qa-database-utils-2.0.1.jar`: biblioteca com licença MIT no `META-INF`.
+- `target/qa-database-utils-2.0.1-sources.jar`: fontes para navegação na IDE.
+- `target/qa-database-utils-2.0.1-javadoc.jar`: documentação da API.
 
 ### Testes sem servidor de banco
 
