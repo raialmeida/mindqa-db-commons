@@ -5,6 +5,8 @@ com configuração por variáveis de ambiente ou arquivos `.properties`.
 Use uma conexão padrão ou selecione conexões e bases diferentes no mesmo teste.
 Cada operação abre e fecha sua própria conexão JDBC.
 
+Documentação completa: [Wiki do GitHub](https://github.com/raialmeida/mindqa-db-commons/wiki).
+
 Funciona em automações Java 11+ de API, interface e integração. Pode ser usada com
 RestAssured, Selenium, Cucumber, JUnit ou TestNG. O código da biblioteca não depende
 desses frameworks; JUnit e H2 são usados somente nos testes do próprio projeto.
