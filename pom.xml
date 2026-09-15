@@ -6,11 +6,11 @@
 
     <groupId>io.github.raialmeida</groupId>
     <artifactId>qa-database-utils</artifactId>
-    <version>2.0.0</version>
+    <version>2.0.1</version>
     <packaging>jar</packaging>
     <name>QA Database Utils</name>
     <description>Utilitários JDBC para testes com SQL Server, PostgreSQL, Oracle e MySQL.</description>
-    <url>https://github.com/raialmeida/mindqa-db-commons</url>
+    <url>https://github.com/raialmeida/mindqa-db-commons/wiki</url>
 
     <licenses>
         <license>
