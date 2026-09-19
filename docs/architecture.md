@@ -2,7 +2,7 @@
 
 ## Objetivo e contrato público
 
-`qa-database-utils` é uma biblioteca Maven pequena, dedicada a operações JDBC em
+`mindqa-db-commons` é uma biblioteca Maven pequena, dedicada a operações JDBC em
 automações de testes. O consumidor fornece a configuração de conexão e utiliza
 os métodos estáticos de `br.com.mindqa.database.DatabaseService`:
 

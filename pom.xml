@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.github.raialmeida</groupId>
-    <artifactId>qa-database-utils</artifactId>
+    <artifactId>mindqa-db-commons</artifactId>
     <version>3.0.0</version>
     <packaging>jar</packaging>
-    <name>QA Database Utils</name>
-    <description>Utilitários JDBC para testes com SQL Server, PostgreSQL, Oracle e MySQL.</description>
+    <name>MindQA DB Commons</name>
+    <description>
+    Biblioteca Java para operações em banco de dados em testes automatizados,
+    com suporte a SQL Server, PostgreSQL, Oracle e MySQL.
+    </description>
     <url>https://github.com/raialmeida/mindqa-db-commons/wiki</url>
 
     <licenses>

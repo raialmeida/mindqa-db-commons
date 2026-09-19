@@ -1,4 +1,4 @@
-# QA Database Utils
+# MindQA DB Commons
 
 Biblioteca Java para executar CRUD em **SQL Server, PostgreSQL, Oracle e MySQL**
 com configuração por variáveis de ambiente ou arquivos `.properties`.
@@ -38,7 +38,7 @@ versão no Maven Central, adicione ao `pom.xml` do projeto de automação:
 ```xml
 <dependency>
     <groupId>io.github.raialmeida</groupId>
-    <artifactId>qa-database-utils</artifactId>
+    <artifactId>mindqa-db-commons</artifactId>
     <version>3.0.0</version>
     <scope>test</scope>
 </dependency>
@@ -778,9 +778,9 @@ JAR usam um timestamp controlado por `project.build.outputTimestamp`.
 
 Artefatos gerados:
 
-- `target/qa-database-utils-3.0.0.jar`: biblioteca com licença MIT no `META-INF`.
-- `target/qa-database-utils-3.0.0-sources.jar`: fontes para navegação na IDE.
-- `target/qa-database-utils-3.0.0-javadoc.jar`: documentação da API.
+- `target/mindqa-db-commons-3.0.0.jar`: biblioteca com licença MIT no `META-INF`.
+- `target/mindqa-db-commons-3.0.0-sources.jar`: fontes para navegação na IDE.
+- `target/mindqa-db-commons-3.0.0-javadoc.jar`: documentação da API.
 
 ### Testes sem servidor de banco
 
