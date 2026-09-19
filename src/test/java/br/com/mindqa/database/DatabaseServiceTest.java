@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DatabaseServiceTest {
     private static final String SQLSERVER_URL =
-            "jdbc:sqlserver://database.test:1433;databaseName=qa_default;encrypt=false;";
+            "jdbc:sqlserver://database.test:1433;databaseName=qa_default;encrypt=false;trustServerCertificate=false;";
     private static final String POSTGRES_URL = "jdbc:postgresql://database.test:5432/qa_default";
 
     @TempDir
@@ -30,7 +30,7 @@ class DatabaseServiceTest {
     @ParameterizedTest
     @CsvSource({
         "postgres,jdbc:postgresql://database.test:5432/qa_default",
-        "sqlserver,jdbc:sqlserver://database.test:1433;databaseName=qa_default;encrypt=false;",
+        "sqlserver,jdbc:sqlserver://database.test:1433;databaseName=qa_default;encrypt=false;trustServerCertificate=false;",
         "mysql,jdbc:mysql://database.test:3306/qa_default",
         "oracle,jdbc:oracle:thin:@//database.test:1521/qa_default"
     })
@@ -47,15 +47,13 @@ class DatabaseServiceTest {
     @ValueSource(strings = {"  ", "\n\t"})
     void rejectsInvalidSqlBeforeLoadingConfiguration(String sql) {
         assertThrows(IllegalArgumentException.class, () -> DatabaseService.select(sql));
-        assertThrows(IllegalArgumentException.class, () -> DatabaseService.selectInDb("qa", sql));
-        assertThrows(IllegalArgumentException.class, () -> DatabaseService.executeUpdate(sql));
-        assertThrows(IllegalArgumentException.class, () -> DatabaseService.executeUpdateInDb("qa", sql));
+        assertThrows(IllegalArgumentException.class, () -> DatabaseService.execute(sql));
     }
 
     @Test
     void rejectsNullParameterArrayBeforeLoadingConfiguration() {
         assertThrows(IllegalArgumentException.class, () -> DatabaseService.select("SELECT 1", (Object[]) null));
-        assertThrows(IllegalArgumentException.class, () -> DatabaseService.executeUpdate("DELETE FROM clientes", (Object[]) null));
+        assertThrows(IllegalArgumentException.class, () -> DatabaseService.execute("DELETE FROM clientes", (Object[]) null));
     }
 
     @Test
@@ -111,20 +109,23 @@ class DatabaseServiceTest {
     @ParameterizedTest
     @ValueSource(strings = {"sqlserver", "postgres"})
     void databaseOverrideWorksWithoutDbNameEnvironment(String type) throws Exception {
-        Map<String, String> environment = environment("DB_TYPE", type);
-        environment.remove("DB_NAME");
+        Map<String, String> environment = namedEnvironment("target", type);
+        environment.remove("DB_CONNECTIONS_TARGET_NAME");
         String url = ("sqlserver".equals(type) ? SQLSERVER_URL : POSTGRES_URL)
                 .replace("qa_default", "qa_other");
-        run(environment, "crud", url, "qa_other");
+        run(environment, "crud", url, "qa_other", "-Dscenario.connection=target",
+                "-Dscenario.password=" + environment.get("DB_CONNECTIONS_TARGET_PASS"));
     }
 
     @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {"   "})
     void blankDatabaseOverrideFallsBackToEnvironment(String dbName) throws Exception {
-        Map<String, String> environment = environment("DB_TYPE", "postgres");
-        environment.put("DB_PORT", "  ");
-        run(environment, "crud", POSTGRES_URL, dbName == null ? "<null>" : dbName);
+        Map<String, String> environment = namedEnvironment("target", "postgres");
+        environment.put("DB_CONNECTIONS_TARGET_PORT", "  ");
+        run(environment, "crud", POSTGRES_URL, dbName == null ? "<null>" : dbName,
+                "-Dscenario.connection=target",
+                "-Dscenario.password=" + environment.get("DB_CONNECTIONS_TARGET_PASS"));
     }
 
     @Test
@@ -157,7 +158,7 @@ class DatabaseServiceTest {
     }
 
     @Test
-    void fourNamedConnectionsAreIsolatedDuringConcurrentCrud() throws Exception {
+    void supportsDefaultNamedAndDatabaseApisWithZeroOneAndMultipleParameters() throws Exception {
         StringBuilder properties = new StringBuilder("db.default.connection=principal\n");
         String[][] connections = {{"principal", "postgres", "pg.test"}, {"legado", "sqlserver", "sql.test"},
                 {"erp", "oracle", "ora.test"}, {"loja", "mysql", "mysql.test"}};
@@ -218,9 +219,9 @@ class DatabaseServiceTest {
     void namedClientValidatesArgumentsBeforeLoadingConfiguration() {
         DatabaseClient client = DatabaseService.connection("notConfigured");
         assertThrows(IllegalArgumentException.class, () -> client.select(" "));
-        assertThrows(IllegalArgumentException.class, () -> client.selectInDb("qa", null));
-        assertThrows(IllegalArgumentException.class, () -> client.executeUpdate(null));
-        assertThrows(IllegalArgumentException.class, () -> client.executeUpdateInDb("qa", " "));
+        assertThrows(IllegalArgumentException.class, () -> client.database("qa").select(null));
+        assertThrows(IllegalArgumentException.class, () -> client.execute(null));
+        assertThrows(IllegalArgumentException.class, () -> client.database("qa").execute(" "));
         assertThrows(IllegalArgumentException.class, () -> client.select("SELECT 1", (Object[]) null));
     }
 
@@ -319,12 +320,15 @@ class DatabaseServiceTest {
     @ParameterizedTest
     @ValueSource(strings = {"sqlserver", "postgres"})
     void databaseOverrideUsesTypeFromFile(String type) throws Exception {
-        writeProperties("config.properties", properties().replace("DB_TYPE=postgres", "DB_TYPE=" + type)
-                .replace("DB_PORT=5432\n", ""));
+        String namedProperties = properties().replace("DB_TYPE=postgres", "DB_TYPE=" + type)
+                .replace("DB_PORT=5432\n", "")
+                .replace("DB_", "DB_CONNECTIONS_TARGET_");
+        writeProperties("config.properties", namedProperties);
         String url = ("sqlserver".equals(type) ? SQLSERVER_URL : POSTGRES_URL)
                 .replace("qa_default", "qa_other");
         run(Map.of(), "crud", url, "qa_other",
-                "-Ddb.config=config.properties", "-Dscenario.password=sênha=ação");
+                "-Ddb.config=config.properties", "-Dscenario.connection=target",
+                "-Dscenario.password=sênha=ação");
     }
 
     @Test
@@ -440,6 +444,13 @@ class DatabaseServiceTest {
             environment.put(key, value);
         }
         return environment;
+    }
+
+    private Map<String, String> namedEnvironment(String name, String type) {
+        Map<String, String> named = new HashMap<>();
+        String prefix = "DB_CONNECTIONS_" + name.toUpperCase(java.util.Locale.ROOT) + "_";
+        environment("DB_TYPE", type).forEach((key, value) -> named.put(prefix + key.substring(3), value));
+        return named;
     }
 
     private void run(Map<String, String> environment, String action, String expected,

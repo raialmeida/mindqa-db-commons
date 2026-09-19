@@ -46,7 +46,7 @@ public final class JdbcScenarioProcess {
     private static boolean pooled;
     private static final Map<String, String> NAMED_URLS = Map.of(
             "principal", "jdbc:postgresql://pg.test:5432/shared",
-            "legado", "jdbc:sqlserver://sql.test:1433;databaseName=shared;encrypt=false;",
+            "legado", "jdbc:sqlserver://sql.test:1433;databaseName=shared;encrypt=false;trustServerCertificate=false;",
             "erp", "jdbc:oracle:thin:@//ora.test:1521/shared",
             "loja", "jdbc:mysql://mysql.test:3306/shared");
 
@@ -197,14 +197,14 @@ public final class JdbcScenarioProcess {
     }
 
     private static void verifyConcurrentCalls() throws Exception {
-        DatabaseService.executeUpdate("CREATE TABLE paralelo (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
+        DatabaseService.execute("CREATE TABLE paralelo (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
         ExecutorService executor = Executors.newFixedThreadPool(4);
         try {
             List<Future<?>> calls = new ArrayList<>();
             for (int id = 1; id <= 20; id++) {
                 final int identifier = id;
                 calls.add(executor.submit((Callable<Void>) () -> {
-                    assertEquals(1, DatabaseService.executeUpdate(
+                    assertEquals(1, DatabaseService.execute(
                             "INSERT INTO paralelo (id, nome) VALUES (?, ?)", identifier, "cliente-" + identifier));
                     assertEquals("cliente-" + identifier, DatabaseService.select(
                             "SELECT nome FROM paralelo WHERE id = ?", identifier).get(0).get("nome"));
@@ -224,10 +224,10 @@ public final class JdbcScenarioProcess {
     private static List<Map<String, Object>> query(String sql, Object... params) throws SQLException {
         try {
             if (client != null) {
-                return useDatabaseOverride ? client.selectInDb(database, sql, params) : client.select(sql, params);
+                DatabaseClient selected = useDatabaseOverride ? client.database(database) : client;
+                return selected.select(sql, params);
             }
-            return useDatabaseOverride ? DatabaseService.selectInDb(database, sql, params)
-                    : DatabaseService.select(sql, params);
+            return DatabaseService.select(sql, params);
         } finally {
             if (!pooled) {
                 driver.assertConnectionsClosed();
@@ -238,10 +238,10 @@ public final class JdbcScenarioProcess {
     private static int update(String sql, Object... params) throws SQLException {
         try {
             if (client != null) {
-                return useDatabaseOverride ? client.executeUpdateInDb(database, sql, params) : client.executeUpdate(sql, params);
+                DatabaseClient selected = useDatabaseOverride ? client.database(database) : client;
+                return selected.execute(sql, params);
             }
-            return useDatabaseOverride ? DatabaseService.executeUpdateInDb(database, sql, params)
-                    : DatabaseService.executeUpdate(sql, params);
+            return DatabaseService.execute(sql, params);
         } finally {
             if (!pooled) {
                 driver.assertConnectionsClosed();
@@ -256,17 +256,19 @@ public final class JdbcScenarioProcess {
             for (String name : NAMED_URLS.keySet()) {
                 DatabaseClient selected = DatabaseService.connection(name);
                 calls.add(executor.submit((Callable<Void>) () -> {
-                    selected.executeUpdate("CREATE TABLE isolation (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
-                    assertEquals(1, selected.executeUpdate("INSERT INTO isolation VALUES (?, ?)", 1, name));
+                    selected.execute("CREATE TABLE isolation (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
+                    assertEquals(1, selected.execute("INSERT INTO isolation VALUES (?, ?)", 1, name));
                     assertEquals(name, selected.select("SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
-                    assertEquals(1, selected.executeUpdate("UPDATE isolation SET nome = ? WHERE id = ?", name + "2", 1));
-                    assertEquals(name + "2", selected.selectInDb("shared", "SELECT nome FROM isolation").get(0).get("nome"));
-                    selected.executeUpdateInDb("other", "CREATE TABLE isolation (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
-                    selected.executeUpdateInDb("other", "INSERT INTO isolation VALUES (?, ?)", 1, "other-" + name);
+                    assertEquals(1, selected.execute("UPDATE isolation SET nome = ? WHERE id = ?", name + "2", 1));
+                    assertEquals(name + "2", selected.database("shared").select(
+                            "SELECT nome FROM isolation").get(0).get("nome"));
+                    selected.database("other").execute("CREATE TABLE isolation (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
+                    selected.database("other").execute("INSERT INTO isolation VALUES (?, ?)", 1, "other-" + name);
                     assertEquals("other-" + name,
-                            selected.selectInDb("other", "SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
+                            selected.database("other").select(
+                                    "SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
                     assertEquals(name + "2", selected.select("SELECT nome FROM isolation WHERE id = ?", 1).get(0).get("nome"));
-                    assertEquals(1, selected.executeUpdateInDb("shared", "DELETE FROM isolation WHERE id = ?", 1));
+                    assertEquals(1, selected.database("shared").execute("DELETE FROM isolation WHERE id = ?", 1));
                     assertTrue(selected.select("SELECT * FROM isolation").isEmpty());
                     return null;
                 }));
@@ -274,7 +276,7 @@ public final class JdbcScenarioProcess {
             for (Future<?> call : calls) {
                 call.get(15, TimeUnit.SECONDS);
             }
-            DatabaseService.executeUpdate("INSERT INTO isolation VALUES (?, ?)", 2, "default");
+            DatabaseService.execute("INSERT INTO isolation VALUES (?, ?)", 2, "default");
             assertEquals("default", DatabaseService.select("SELECT nome FROM isolation WHERE id = ?", 2).get(0).get("nome"));
             assertEquals(1, DatabaseService.connection("principal").select("SELECT * FROM isolation").size());
             assertTrue(DatabaseService.connection("erp").select("SELECT * FROM isolation").isEmpty());

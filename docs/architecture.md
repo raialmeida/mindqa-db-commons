@@ -4,15 +4,15 @@
 
 `qa-database-utils` é uma biblioteca Maven pequena, dedicada a operações JDBC em
 automações de testes. O consumidor fornece a configuração de conexão e utiliza
-os quatro métodos estáticos de `br.com.mindqa.database.DatabaseService`:
+os métodos estáticos de `br.com.mindqa.database.DatabaseService`:
 
 - `select(sql, params)`
-- `selectInDb(dbName, sql, params)`
-- `executeUpdate(sql, params)`
-- `executeUpdateInDb(dbName, sql, params)`
+- `execute(sql, params)`
 
 Os métodos estáticos usam a conexão padrão. `DatabaseService.connection(nome)`
-retorna um `DatabaseClient` com as mesmas quatro operações para um destino nomeado.
+retorna um `DatabaseClient` com as mesmas operações para um destino nomeado.
+`connection(nome).database(base)` cria uma visão imutável do cliente para outra
+base no mesmo servidor, preservando as credenciais e opções da conexão.
 O tipo do banco vem da configuração: SQL Server, PostgreSQL, Oracle ou MySQL.
 O consumidor não instancia configurações, drivers ou executores. As operações
 declaram `throws SQLException` e propagam a exceção original do driver em falhas JDBC.
@@ -31,7 +31,7 @@ o driver é selecionado pelo tipo configurado para a conexão.
 No [exemplo de cadastro do README](../README.md#post-cadastrar-pela-api-e-validar-no-banco),
 RestAssured envia `POST /clientes` e valida HTTP `201`. O teste usa o ID retornado
 para consultar o cadastro com `DatabaseService.select`, compara os dados gravados
-com os enviados e demonstra a limpeza do registro com `executeUpdate`.
+com os enviados e demonstra a limpeza do registro com `execute`.
 O cenário pressupõe que a API tenha concluído a gravação antes de responder e que
 a conexão do teste aponte para o mesmo banco da API.
 
@@ -48,8 +48,8 @@ chave obrigatória. Arquivos explicitamente selecionados devem existir.
 Para cada chave, `DatabaseConfiguration` prioriza a variável `DB_*` sobre o valor
 do arquivo, inclusive quando a variável está vazia. O arquivo aceita as formas
 `DB_*` e `db.*`, com prioridade para `DB_*`. `JdbcConnectionSettings` aplica os
-padrões e valida os valores resultantes. Nos métodos `*InDb`, um nome de banco
-não vazio substitui `DB_NAME`, mantendo tipo, host, porta e credenciais.
+padrões e valida os valores resultantes. Em `database(nome)`, um nome de banco
+não vazio substitui `DB_NAME` na operação, mantendo tipo, host, porta e credenciais.
 
 A biblioteca não procura todos os arquivos `.properties` do consumidor. A convenção
 automática vale apenas para `database.properties`; a seleção explícita determina
@@ -85,7 +85,8 @@ Isso permite dois destinos PostgreSQL ou Oracle com hosts e credenciais diferent
 Eles usam letras ASCII e números, começando com uma letra, para que a conversão
 entre propriedades e variáveis de ambiente seja unívoca.
 
-`connection(nome)` retorna um cliente imutável que guarda somente o nome. Ele não
+`connection(nome)` retorna um cliente imutável que guarda o nome da conexão;
+`database(nome)` devolve outro cliente imutável com a mesma conexão e a base escolhida. Eles não
 abre JDBC nem lê arquivos ao ser criado. A operação carrega uma configuração nova,
 portanto reutilizar o cliente continua observando alterações posteriores no arquivo.
 O cliente padrão da fachada também não guarda configurações ou conexões.
@@ -111,7 +112,7 @@ flowchart TD
 | Componente | Responsabilidade | Limite |
 | --- | --- | --- |
 | `DatabaseService` | Expor operações na conexão padrão e criar clientes por nome. | Não guarda credenciais ou conexões JDBC. |
-| `DatabaseClient` | Validar argumentos, resolver a conexão selecionada e executar CRUD. | Guarda somente um nome; fecha o JDBC após cada operação. |
+| `DatabaseClient` | Validar argumentos, resolver a conexão e a base selecionadas e executar CRUD. | Guarda somente os nomes selecionados; fecha o JDBC após cada operação. |
 | `DatabaseConfigurationLoader` | Selecionar e ler o ambiente, o classpath e o arquivo externo. | Não abre conexões JDBC. |
 | `DatabaseConfiguration` | Preservar valores, selecionar o namespace da conexão e aplicar precedência. | Não executa I/O e não conhece os drivers. |
 | `JdbcConnectionSettings` | Validar as opções JDBC, aplicar padrões e montar a URL com escapes. | Não lê arquivos, altera estado global ou executa SQL. |
@@ -127,6 +128,9 @@ O carregador fecha os recursos de leitura antes de devolver a configuração.
 `DatabaseConfiguration` copia os valores recebidos para mapas imutáveis.
 `JdbcConnectionSettings` mantém somente os valores validados da chamada e fornece
 uma nova instância de `Properties` para cada solicitação de credenciais JDBC.
+Opções adicionais em `DB_DRIVER_PROPERTIES` também são copiadas para essa instância,
+enquanto destino, credenciais, timeouts e segurança do SQL Server permanecem sob
+chaves próprias e não podem ser sobrescritos por propriedades genéricas.
 
 ## Organização dos pacotes
 
@@ -175,15 +179,14 @@ execução; eles não são distribuídos no JAR desta biblioteca.
 - Documentação e mensagens de uso em português, mantendo os identificadores da API em inglês.
 
 Os nomes públicos `DatabaseService`, `DatabaseClient` e dos métodos fazem parte do
-contrato do consumidor. A versão 2.0.0 altera esse contrato ao propagar
-`SQLException` diretamente; consumidores devem declarar ou tratar a exceção.
-Refatorações internas posteriores devem preservar pacotes, assinaturas e comportamento.
+contrato do consumidor. Refatorações internas posteriores devem preservar pacotes,
+assinaturas e comportamento.
 
 ## Execução e concorrência
 
 1. O cliente valida SQL e parâmetros antes de realizar I/O.
 2. O carregador captura as fontes de configuração para aquela operação.
-3. A configuração resolve a conexão e os valores JDBC são validados, incluindo `*InDb`.
+3. A configuração resolve a conexão e os valores JDBC são validados, incluindo a base escolhida por `database()`.
 4. A chamada abre sua conexão e cria um `QueryRunner` com o timeout selecionado.
 5. A operação usa parâmetros preparados e fecha seus recursos.
 6. Em caso de falha JDBC, a exceção original do driver chega ao consumidor.
@@ -210,7 +213,7 @@ O auto-commit torna cada alteração independente. O dialecto SQL e os tipos dos
 valores de resultado seguem o driver selecionado. O código consumidor permanece
 responsável por preparar e limpar os dados necessários ao teste.
 
-No Oracle, o banco de destino é um service name; `*InDb` troca esse serviço e não
+No Oracle, o banco de destino é um service name; `database()` troca esse serviço e não
 o schema. A conexão usa JDBC Thin/Easy Connect por TCP. O MySQL usa Connector/J.
 O timeout de conexão usa a propriedade e a unidade de cada driver: `loginTimeout`
 em segundos no SQL Server/PostgreSQL, `oracle.jdbc.loginTimeout` em segundos no

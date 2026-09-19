@@ -39,7 +39,7 @@ versão no Maven Central, adicione ao `pom.xml` do projeto de automação:
 <dependency>
     <groupId>io.github.raialmeida</groupId>
     <artifactId>qa-database-utils</artifactId>
-    <version>2.0.1</version>
+    <version>3.0.0</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -57,7 +57,7 @@ aberta. Não é necessário configurar servidores que você não utiliza.
 | Oracle | `com.oracle.database.jdbc:ojdbc11:23.26.3.0.0` | `1521` |
 | MySQL | `com.mysql:mysql-connector-j:9.7.0` | `3306` |
 
-Até a publicação de `2.0.1`, instale esta versão localmente com `mvn clean install`.
+Até a publicação de `3.0.0`, instale esta versão localmente com `mvn clean install`.
 Se estiver usando a versão publicada `1.0.1`, selecione o arquivo de configuração
 explicitamente e consulte a documentação correspondente àquela versão.
 
@@ -165,13 +165,12 @@ import br.com.mindqa.database.DatabaseService;
 | Método | Retorno |
 | --- | --- |
 | `select(String sql, Object... params)` | `List<Map<String, Object>>` |
-| `selectInDb(String dbName, String sql, Object... params)` | `List<Map<String, Object>>` |
-| `executeUpdate(String sql, Object... params)` | `int` |
-| `executeUpdateInDb(String dbName, String sql, Object... params)` | `int` |
-| `connection(String name)` | `DatabaseClient` com as mesmas quatro operações de CRUD |
+| `execute(String sql, Object... params)` | `int` |
+| `connection(String name)` | `DatabaseClient` para a conexão selecionada |
+| `DatabaseClient.database(String name)` | Novo `DatabaseClient` para outra base da mesma conexão |
 
-As quatro operações estáticas usam a conexão padrão. O cliente retornado por
-`connection(nome)` oferece as mesmas operações para a conexão escolhida.
+As operações estáticas usam a conexão e a base padrão. O cliente retornado por
+`connection(nome)` oferece `select` e `execute` para a conexão escolhida.
 O tipo do banco e as credenciais vêm da configuração, sem parâmetros adicionais
 de tipo nos métodos de consulta.
 As operações de CRUD declaram `throws SQLException`: erros JDBC são entregues
@@ -179,7 +178,7 @@ diretamente pelo driver. Em JUnit, declare `throws SQLException` no método de t
 
 `select` retorna uma lista vazia quando não há resultados. Cada mapa representa uma
 linha e usa os nomes ou aliases das colunas como chaves; os valores mantêm os tipos
-retornados pelo JDBC. `executeUpdate` serve para `INSERT`, `UPDATE` e `DELETE` e
+retornados pelo JDBC. `execute` serve para `INSERT`, `UPDATE` e `DELETE` e
 retorna a quantidade de linhas afetadas, não o ID gerado.
 
 Use `?` para valores e passe os parâmetros na mesma ordem. Para um único SQL `NULL`,
@@ -202,27 +201,26 @@ import java.util.UUID;
 String id = UUID.randomUUID().toString();
 String email = "qa-" + id + "@example.com";
 
-int inseridos = DatabaseService.executeUpdate(
+int inseridos = DatabaseService.execute(
         "INSERT INTO clientes (id, nome, email) VALUES (?, ?, ?)",
         id, "Cliente QA", email);
 
 List<Map<String, Object>> clientes = DatabaseService.select(
         "SELECT id, nome, email FROM clientes WHERE id = ?", id);
 
-int atualizados = DatabaseService.executeUpdate(
+int atualizados = DatabaseService.execute(
         "UPDATE clientes SET nome = ? WHERE id = ?", "Cliente atualizado", id);
-int removidos = DatabaseService.executeUpdate("DELETE FROM clientes WHERE id = ?", id);
+int removidos = DatabaseService.execute("DELETE FROM clientes WHERE id = ?", id);
 ```
 
 ### Outro banco no mesmo servidor
 
 ```java
-// Mantém tipo, host, porta e credenciais da conexão padrão.
-DatabaseService.selectInDb(
-        "qa_auditoria", "SELECT nome FROM clientes WHERE id = ?", "cliente-1");
+// Mantém tipo, host, porta e credenciais da conexão selecionada.
+var auditoria = DatabaseService.connection("postgresql").database("qa_auditoria");
 
-DatabaseService.executeUpdateInDb(
-        "qa_auditoria", "UPDATE clientes SET nome = ? WHERE id = ?",
+auditoria.select("SELECT nome FROM clientes WHERE id = ?", "cliente-1");
+auditoria.execute("UPDATE clientes SET nome = ? WHERE id = ?",
         "Cliente atualizado", "cliente-1");
 ```
 
@@ -294,6 +292,15 @@ mvn test
 ambiente. Para isso, remova a senha do arquivo e defina, por exemplo,
 `MYSQL_PASS` no pipeline. Os valores não são interpolados dentro do `.properties`.
 
+As opções adicionais usam as mesmas chaves como variáveis de ambiente. Coloque
+`DB_DRIVER_PROPERTIES` entre aspas no shell porque `&` possui significado especial:
+
+```bash
+export SQLSERVER_ENCRYPT=true
+export SQLSERVER_TRUST_SERVER_CERTIFICATE=false
+export SQLSERVER_DRIVER_PROPERTIES='applicationName=qa-automation&authenticationScheme=javaKerberos'
+```
+
 ### Campos por conexão
 
 Substitua `<PREFIXO>` por `POSTGRESQL`, `SQLSERVER`, `MYSQL` ou `ORACLE`.
@@ -304,9 +311,12 @@ Substitua `<PREFIXO>` por `POSTGRESQL`, `SQLSERVER`, `MYSQL` ou `ORACLE`.
 | `<PREFIXO>_PORT` | Não | Porta entre 1 e 65535; omitida ou em branco usa o padrão do motor. |
 | `<PREFIXO>_USER` | Sim | Usuário de conexão. |
 | `<PREFIXO>_PASS` | Sim | Senha; valor vazio é preservado se o servidor permitir. |
-| `<PREFIXO>_NAME` | Condicional | Base de dados ou service name Oracle. Dispensável quando informado em `*InDb`. |
+| `<PREFIXO>_NAME` | Condicional | Base de dados ou service name Oracle. Dispensável quando selecionado com `database(nome)`. |
 | `<PREFIXO>_QUERY_TIMEOUT_SECONDS` | Não | Timeout de execução do statement, em segundos. Padrão: `0`. |
 | `<PREFIXO>_LOGIN_TIMEOUT_SECONDS` | Não | Timeout de conexão, em segundos. Padrão: `0`. |
+| `<PREFIXO>_ENCRYPT` | Não | Criptografia do SQL Server: `true`, `false` ou `strict`. Padrão: `false`. |
+| `<PREFIXO>_TRUST_SERVER_CERTIFICATE` | Não | Confiança no certificado do SQL Server: `true` ou `false`. Padrão: `false`. |
+| `<PREFIXO>_DRIVER_PROPERTIES` | Não | Propriedades adicionais entregues ao driver no formato `chave=valor&outra=valor`. |
 
 ### Configuração simples `DB_*`
 
@@ -319,16 +329,19 @@ Continua suportada, sem necessidade de migrar configurações existentes:
 | `DB_PORT` | Não | Porta entre 1 e 65535. |
 | `DB_USER` | Sim | Usuário de conexão. |
 | `DB_PASS` | Sim | Senha; valor vazio é preservado. |
-| `DB_NAME` | Condicional | Banco ou service name Oracle. Dispensável ao informar o destino em `*InDb`. |
+| `DB_NAME` | Condicional | Banco ou service name Oracle. Dispensável ao selecionar o destino com `database(nome)`. |
 | `DB_QUERY_TIMEOUT_SECONDS` | Não | Timeout de query em segundos (padrão: 0). |
 | `DB_LOGIN_TIMEOUT_SECONDS` | Não | Timeout de conexão em segundos (padrão: 0). |
+| `DB_ENCRYPT` | Não | Criptografia do SQL Server: `true`, `false` ou `strict` (padrão: `false`). |
+| `DB_TRUST_SERVER_CERTIFICATE` | Não | Confiança no certificado do SQL Server: `true` ou `false` (padrão: `false`). |
+| `DB_DRIVER_PROPERTIES` | Não | Propriedades adicionais entregues ao driver. |
 
 IPv6 pode ser informado como `::1` ou `[::1]`. O arquivo também aceita `db.type`,
 `db.host`, `db.port`, `db.user`, `db.pass`, `db.name` e as chaves de timeout com pontos.
 Na configuração simples, `DB_TYPE` ausente ou em branco usa SQL Server;
 nos prefixos por motor, o tipo é inferido pelo prefixo. A porta segue o motor
 selecionado. Host, usuário e banco devem ser não vazios. Um `dbName` nulo ou em
-branco em `*InDb` usa o nome configurado.
+branco em `database(nome)` usa o nome configurado.
 
 As variáveis de ambiente prevalecem sobre o arquivo, inclusive quando vazias.
 No arquivo, chaves em maiúsculas prevalecem sobre a forma em minúsculas.
@@ -350,13 +363,39 @@ As URLs são montadas automaticamente; usuário e senha são enviados separadame
 
 | Banco | URL com host e porta padrão |
 | --- | --- |
-| SQL Server | `jdbc:sqlserver://localhost:1433;databaseName=qa_database;encrypt=false;` |
+| SQL Server | `jdbc:sqlserver://localhost:1433;databaseName=qa_database;encrypt=false;trustServerCertificate=false;` |
 | PostgreSQL | `jdbc:postgresql://localhost:5432/qa_database` |
 | MySQL | `jdbc:mysql://localhost:3306/qa_database` |
 | Oracle | `jdbc:oracle:thin:@//localhost:1521/FREEPDB1` |
 
-No SQL Server, `encrypt=false` é fixo nesta versão. No PostgreSQL e no MySQL,
-as demais opções de conexão seguem os padrões dos drivers. Nomes de base com
+No SQL Server, `encrypt` e `trustServerCertificate` usam `false` por padrão e
+podem ser configurados por conexão:
+
+```properties
+SQLSERVER_ENCRYPT=true
+SQLSERVER_TRUST_SERVER_CERTIFICATE=false
+```
+
+Em uma conexão nomeada, use por exemplo
+`DB_CONNECTIONS_LEGADO_ENCRYPT=true`. `encrypt` aceita `true`, `false` ou `strict`;
+`trustServerCertificate` aceita `true` ou `false`. Outros valores são rejeitados
+antes da abertura da conexão.
+
+Propriedades adicionais de qualquer driver podem ser definidas por conexão:
+
+```properties
+POSTGRESQL_DRIVER_PROPERTIES=ApplicationName=qa-automation&sslmode=require
+DB_CONNECTIONS_LEGADO_DRIVER_PROPERTIES=applicationName=qa-legado
+```
+
+Separe as propriedades com `&` e use codificação percentual quando o nome ou valor
+contiver `&`, `=` ou espaços; por exemplo, `applicationName=qa%20automation`.
+As chaves são entregues ao driver preservando a grafia. Não são aceitas duplicatas
+nem propriedades controladas pela biblioteca, como usuário, senha, host, porta,
+base, `encrypt`, `trustServerCertificate` e timeouts. Configure esses valores pelas
+chaves específicas. Variáveis de ambiente continuam prevalecendo sobre o arquivo.
+
+As demais opções não informadas seguem os padrões dos drivers. Nomes de base com
 caracteres especiais recebem os escapes necessários para compor a URL.
 
 No Oracle, `ORACLE_NAME` é o **service name**, não o SID nem o schema. Esse nome aceita
@@ -371,7 +410,7 @@ O Connector/J incluído suporta MySQL 8.0 ou superior, conforme suas
 Cada prefixo define uma conexão independente. O arquivo
 [database.properties](src/test/resources/database.properties) contém exemplos dos
 quatro motores. No teste, escolha a conexão pelo nome e, quando necessário, informe
-uma base diferente com `selectInDb`.
+uma base diferente com `database(nome)`.
 
 ```java
 import br.com.mindqa.database.DatabaseService;
@@ -391,9 +430,11 @@ class ConsultaMultiplosBancosTest {
 
         // Cada cliente usa suas próprias credenciais e pode apontar para uma base diferente.
         List<Map<String, Object>> clientes = DatabaseService.connection("postgresql")
-                .selectInDb("qa_clientes", sql, id);
+                .database("qa_clientes")
+                .select(sql, id);
         List<Map<String, Object>> auditoria = DatabaseService.connection("mysql")
-                .selectInDb("qa_auditoria", sql, id);
+                .database("qa_auditoria")
+                .select(sql, id);
 
         assertEquals(1, clientes.size());
         assertEquals(1, auditoria.size());
@@ -410,8 +451,8 @@ também contém exemplos compiláveis de CRUD e consulta em múltiplos motores e
 Seus métodos ilustrativos não executam automaticamente no build.
 
 `connection(nome)` escolhe o conjunto de tipo, host, porta e credenciais.
-`selectInDb(base, ...)` escolhe uma base nesse servidor; no Oracle, escolhe outro
-service name. As duas escolhas podem ser combinadas também com `executeUpdateInDb`.
+`database(base)` escolhe uma base nesse servidor; no Oracle, escolhe outro
+service name. O cliente retornado oferece `select` e `execute`.
 São operações JDBC independentes: não existe transação compartilhada nem uma
 consulta SQL única que faça JOIN entre servidores pela biblioteca.
 
@@ -444,7 +485,7 @@ db.connections.replica.name=clientes_replica
 Outra conexão pode ter o mesmo `type` com outro host, usuário ou banco. Os nomes
 aceitam letras ASCII e números, começando com uma letra; use minúsculas nas
 propriedades com pontos. Todas as opções são independentes por conexão, incluindo
-`port`, `query.timeout.seconds` e `login.timeout.seconds`.
+`port`, timeouts, segurança do SQL Server e propriedades adicionais do driver.
 
 | Propriedade | Variável de ambiente equivalente |
 | --- | --- |
@@ -480,10 +521,10 @@ DatabaseService.connection("replica").select(sql, id);
 
 DatabaseClient erp = DatabaseService.connection("erp");
 erp.select(sql, id);
-erp.selectInDb("OUTROSERVICO", sql, id);
+erp.database("OUTROSERVICO").select(sql, id);
 ```
 
-O cliente guarda somente o nome e pode ser reutilizado em paralelo. Não abre JDBC
+O cliente guarda somente os nomes da conexão e da base selecionadas e pode ser reutilizado em paralelo. Não abre JDBC
 ao ser criado e não precisa ser fechado; cada operação obtém sua configuração e usa
 uma conexão exclusiva enquanto executa. Não altere propriedades globais para trocar de
 banco durante testes paralelos: selecione o cliente apropriado.
@@ -563,7 +604,7 @@ class CadastroClienteTest {
         assertEquals(email, clientes.get(0).get("email"));
 
         // 3. Remove o dado exclusivo deste teste.
-        DatabaseService.executeUpdate("DELETE FROM clientes WHERE email = ?", email);
+        DatabaseService.execute("DELETE FROM clientes WHERE email = ?", email);
     }
 }
 ```
@@ -590,7 +631,7 @@ o cadastro também criar registros em outras tabelas.
 
 Para validar o cadastro em uma conexão nomeada, crie
 `DatabaseClient banco = DatabaseService.connection("principal")` no teste e use
-`banco.select(...)` na consulta e `banco.executeUpdate(...)` na limpeza. Importe
+`banco.select(...)` na consulta e `banco.execute(...)` na limpeza. Importe
 `br.com.mindqa.database.DatabaseClient`. O POST com RestAssured permanece igual.
 
 ### GET: consultar dados preparados pelo teste
@@ -617,10 +658,10 @@ class ConsultaClienteTest {
         String id = UUID.randomUUID().toString();
         String email = "qa-" + id + "@example.com";
 
-        assertEquals(1, DatabaseService.executeUpdate(
+        assertEquals(1, DatabaseService.execute(
                 "INSERT INTO clientes (id, nome, email) VALUES (?, ?, ?)",
                 id, "Cliente inicial", email));
-        assertEquals(1, DatabaseService.executeUpdate(
+        assertEquals(1, DatabaseService.execute(
                 "UPDATE clientes SET nome = ? WHERE id = ?", "Cliente atualizado", id));
 
         given()
@@ -634,7 +675,7 @@ class ConsultaClienteTest {
                 .body("nome", equalTo("Cliente atualizado"))
                 .body("email", equalTo(email));
 
-        DatabaseService.executeUpdate("DELETE FROM clientes WHERE id = ?", id);
+        DatabaseService.execute("DELETE FROM clientes WHERE id = ?", id);
     }
 }
 ```
@@ -671,7 +712,7 @@ herdadas pelas conexões nomeadas. A precedência das variáveis de ambiente sob
 o arquivo continua valendo, inclusive para essas opções.
 
 Cada combinação de conexão, base, credenciais e opções do pool mantém seu próprio
-pool. Assim, `selectInDb` não mistura conexões de bases diferentes. São mantidos
+pool. Assim, `database(nome)` não mistura conexões de bases diferentes. São mantidos
 até 32 pools; destinos adicionais usam conexões diretas, abertas e fechadas por
 operação. Pools ociosos podem liberar conexões físicas, mas continuam registrados
 até o fechamento dos pools.
@@ -737,9 +778,9 @@ JAR usam um timestamp controlado por `project.build.outputTimestamp`.
 
 Artefatos gerados:
 
-- `target/qa-database-utils-2.0.1.jar`: biblioteca com licença MIT no `META-INF`.
-- `target/qa-database-utils-2.0.1-sources.jar`: fontes para navegação na IDE.
-- `target/qa-database-utils-2.0.1-javadoc.jar`: documentação da API.
+- `target/qa-database-utils-3.0.0.jar`: biblioteca com licença MIT no `META-INF`.
+- `target/qa-database-utils-3.0.0-sources.jar`: fontes para navegação na IDE.
+- `target/qa-database-utils-3.0.0-javadoc.jar`: documentação da API.
 
 ### Testes sem servidor de banco
 
@@ -777,7 +818,7 @@ DB_DEFAULT_CONNECTION='' mvn clean verify -Pdatabase-integration
 
 Execute para cada tipo desejado: `postgres`, `sqlserver`, `oracle` ou `mysql`.
 O teste usa uma tabela com nome
-único, verifica CRUD e os métodos `*InDb`, e remove a tabela ao terminar.
+único, verifica CRUD e a seleção fluente de bases, e remove a tabela ao terminar.
 
 Para testar isolamento entre duas conexões e duas bases por conexão na mesma
 execução, configure os nomes e crie previamente a base alternativa em ambos os

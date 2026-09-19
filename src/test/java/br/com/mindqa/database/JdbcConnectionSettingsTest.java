@@ -27,7 +27,77 @@ class JdbcConnectionSettingsTest {
                 .getPropertyInfo(settings.jdbcUrl(), settings.connectionProperties());
         assertEquals(database, property(properties, "databaseName"));
         assertTrue("false".equalsIgnoreCase(property(properties, "encrypt")));
+        assertTrue("false".equalsIgnoreCase(property(properties, "trustServerCertificate")));
         assertEquals("qa_user", property(properties, "user"));
+    }
+
+    @Test
+    void configuresSqlServerEncryptionWithoutChangingCredentialsOrDatabase() throws Exception {
+        JdbcConnectionSettings settings = settings(Map.of(
+                "DB_ENCRYPT", "true", "DB_TRUST_SERVER_CERTIFICATE", "true"));
+        DriverPropertyInfo[] properties = new SQLServerDriver()
+                .getPropertyInfo(settings.jdbcUrl(), settings.connectionProperties());
+        assertTrue("true".equalsIgnoreCase(property(properties, "encrypt")));
+        assertTrue("true".equalsIgnoreCase(property(properties, "trustServerCertificate")));
+        assertEquals("qa_default", property(properties, "databaseName"));
+        assertEquals("qa_user", property(properties, "user"));
+    }
+
+    @Test
+    void supportsSqlServerStrictEncryption() throws Exception {
+        JdbcConnectionSettings settings = settings(Map.of("DB_ENCRYPT", "strict"));
+        DriverPropertyInfo[] properties = new SQLServerDriver()
+                .getPropertyInfo(settings.jdbcUrl(), settings.connectionProperties());
+        assertEquals("strict", property(properties, "encrypt").toLowerCase(java.util.Locale.ROOT));
+    }
+
+    @Test
+    void rejectsInvalidSqlServerEncryption() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> settings(Map.of("DB_ENCRYPT", "enabled")));
+        assertTrue(exception.getMessage().contains("DB_ENCRYPT"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"sqlserver", "postgres", "oracle", "mysql"})
+    void passesAdditionalPropertiesToEveryDriver(String type) {
+        JdbcConnectionSettings settings = settings(Map.of("DB_TYPE", type,
+                "DB_DRIVER_PROPERTIES", "applicationName=qa%20automation&custom.flag=a%26b%3Dc"));
+        Properties properties = settings.connectionProperties();
+        assertEquals("qa automation", properties.getProperty("applicationName"));
+        assertEquals("a&b=c", properties.getProperty("custom.flag"));
+        assertEquals("qa_user", properties.getProperty("user"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"invalid", "=value", "key=value&", "key=one&key=two",
+            "user=other", "password=other", "encrypt=true", "trustServerCertificate=true",
+            "loginTimeout=99", "bad%ZZ=value"})
+    void rejectsInvalidReservedOrDuplicatedDriverProperties(String value) {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> settings(Map.of("DB_DRIVER_PROPERTIES", value)));
+        assertTrue(exception.getMessage().contains("DB_DRIVER_PROPERTIES"));
+    }
+
+    @Test
+    void appliesSqlServerAndAdditionalPropertiesToNamedConnection() throws Exception {
+        Map<String, String> environment = Map.of(
+                "DB_CONNECTIONS_LEGADO_TYPE", "sqlserver",
+                "DB_CONNECTIONS_LEGADO_HOST", "localhost",
+                "DB_CONNECTIONS_LEGADO_USER", "qa_user",
+                "DB_CONNECTIONS_LEGADO_PASS", "qa_pass",
+                "DB_CONNECTIONS_LEGADO_NAME", "qa_database",
+                "DB_CONNECTIONS_LEGADO_ENCRYPT", "true",
+                "DB_CONNECTIONS_LEGADO_TRUST_SERVER_CERTIFICATE", "true",
+                "DB_CONNECTIONS_LEGADO_DRIVER_PROPERTIES", "applicationName=qa-legado");
+        DatabaseConfiguration configuration = DatabaseConfigurationLoader
+                .load(environment, new Properties(), null).forConnection("legado");
+        JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, null);
+        DriverPropertyInfo[] properties = new SQLServerDriver()
+                .getPropertyInfo(settings.jdbcUrl(), settings.connectionProperties());
+        assertTrue("true".equalsIgnoreCase(property(properties, "encrypt")));
+        assertTrue("true".equalsIgnoreCase(property(properties, "trustServerCertificate")));
+        assertEquals("qa-legado", settings.connectionProperties().getProperty("applicationName"));
     }
 
     @ParameterizedTest

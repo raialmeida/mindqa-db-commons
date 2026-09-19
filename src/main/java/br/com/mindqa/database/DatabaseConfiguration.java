@@ -14,7 +14,8 @@ import java.util.TreeSet;
 final class DatabaseConfiguration {
     private static final Set<String> CONNECTION_KEYS = Set.of("DB_TYPE", "DB_HOST", "DB_PORT",
             "DB_USER", "DB_PASS", "DB_NAME", "DB_QUERY_TIMEOUT_SECONDS", "DB_LOGIN_TIMEOUT_SECONDS",
-            "DB_POOL_ENABLED", "DB_POOL_MAX_SIZE", "DB_POOL_CONNECTION_TIMEOUT_MS");
+            "DB_POOL_ENABLED", "DB_POOL_MAX_SIZE", "DB_POOL_CONNECTION_TIMEOUT_MS",
+            "DB_ENCRYPT", "DB_TRUST_SERVER_CERTIFICATE", "DB_DRIVER_PROPERTIES");
     private static final Set<String> DATABASE_TYPE_PREFIXES = Set.of("SQLSERVER", "MYSQL", "POSTGRESQL", "ORACLE");
     private final Map<String, String> fileProperties;
     private final Map<String, String> environment;

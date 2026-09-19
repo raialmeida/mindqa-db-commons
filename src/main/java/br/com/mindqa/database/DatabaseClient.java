@@ -13,7 +13,7 @@ import org.apache.commons.dbutils.handlers.MapListHandler;
 /**
  * Operações JDBC para uma conexão selecionada por {@link DatabaseService#connection(String)}.
  * <p>Cada chamada usa uma configuração imutável e sua própria conexão em auto-commit.
- * Este cliente guarda somente o nome da conexão e pode ser reutilizado. Criá-lo não abre
+ * Este cliente guarda somente os nomes da conexão e da base selecionadas e pode ser reutilizado. Criá-lo não abre
  * conexões JDBC; por padrão, a configuração é lida a cada operação. Cache e pool são opcionais.
  * Não requer fechamento pelo consumidor; com pool, fechar a conexão a devolve ao pool.
  * Chamadas concorrentes não compartilham conexões ou estado mutável.
@@ -21,9 +21,26 @@ import org.apache.commons.dbutils.handlers.MapListHandler;
  */
 public final class DatabaseClient {
     private final String connectionName;
+    private final String databaseName;
 
     DatabaseClient(String connectionName) {
+        this(connectionName, null);
+    }
+
+    private DatabaseClient(String connectionName, String databaseName) {
         this.connectionName = connectionName;
+        this.databaseName = databaseName;
+    }
+
+    /**
+     * Seleciona outro banco preservando a conexão, as credenciais e as demais opções.
+     * Criar o cliente não abre uma conexão JDBC.
+     *
+     * @param databaseName banco de destino (service name no Oracle); nulo ou em branco usa o banco configurado
+     * @return novo cliente imutável para o banco selecionado
+     */
+    public DatabaseClient database(String databaseName) {
+        return new DatabaseClient(connectionName, databaseName);
     }
 
     /**
@@ -38,25 +55,9 @@ public final class DatabaseClient {
      * @throws SQLException erro original do driver ao conectar, consultar ou fechar a conexão
      */
     public List<Map<String, Object>> select(String sql, Object... params) throws SQLException {
-        return selectInDb(null, sql, params);
-    }
-
-    /**
-     * Consulta outro banco no mesmo servidor e com as mesmas credenciais.
-     *
-     * @param dbName banco de destino (service name no Oracle); nulo ou em branco usa a configuração
-     * @param sql SQL com placeholders {@code ?} para valores
-     * @param params valores na ordem dos placeholders
-     * @return linhas indexadas pelo nome ou alias das colunas, ou lista vazia
-     * @throws IllegalArgumentException se o SQL estiver vazio, o array de parâmetros for nulo
-     *                                  ou a configuração for inválida
-     * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
-     * @throws SQLException erro original do driver ao conectar, consultar ou fechar a conexão
-     */
-    public List<Map<String, Object>> selectInDb(String dbName, String sql, Object... params) throws SQLException {
         validateArguments(sql, params);
         DatabaseConfiguration configuration = DatabaseConfigurationLoader.load().forConnection(connectionName);
-        JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, dbName);
+        JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, databaseName);
         try (Connection connection = openConnection(settings)) {
             return createQueryRunner(settings).query(connection, sql, new MapListHandler(), params);
         }
@@ -73,26 +74,10 @@ public final class DatabaseClient {
      * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
      * @throws SQLException erro original do driver ao conectar, alterar ou fechar a conexão
      */
-    public int executeUpdate(String sql, Object... params) throws SQLException {
-        return executeUpdateInDb(null, sql, params);
-    }
-
-    /**
-     * Executa INSERT, UPDATE ou DELETE em outro banco do mesmo servidor.
-     *
-     * @param dbName banco de destino (service name no Oracle); nulo ou em branco usa a configuração
-     * @param sql SQL com placeholders {@code ?} para valores
-     * @param params valores na ordem dos placeholders
-     * @return quantidade de linhas afetadas, não o ID gerado
-     * @throws IllegalArgumentException se o SQL estiver vazio, o array de parâmetros for nulo
-     *                                  ou a configuração for inválida
-     * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
-     * @throws SQLException erro original do driver ao conectar, alterar ou fechar a conexão
-     */
-    public int executeUpdateInDb(String dbName, String sql, Object... params) throws SQLException {
+    public int execute(String sql, Object... params) throws SQLException {
         validateArguments(sql, params);
         DatabaseConfiguration configuration = DatabaseConfigurationLoader.load().forConnection(connectionName);
-        JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, dbName);
+        JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, databaseName);
         try (Connection connection = openConnection(settings)) {
             return createQueryRunner(settings).update(connection, sql, params);
         }

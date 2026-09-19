@@ -6,7 +6,7 @@
 
     <groupId>io.github.raialmeida</groupId>
     <artifactId>qa-database-utils</artifactId>
-    <version>2.0.1</version>
+    <version>3.0.0</version>
     <packaging>jar</packaging>
     <name>QA Database Utils</name>
     <description>Utilitários JDBC para testes com SQL Server, PostgreSQL, Oracle e MySQL.</description>
@@ -52,7 +52,7 @@
         <hikaricp.version>7.1.0</hikaricp.version>
         <h2.version>2.5.250</h2.version>
         <maven.test.plugins.version>3.2.5</maven.test.plugins.version>
-        <project.build.outputTimestamp>2026-09-12T00:00:00Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-09-19T00:00:00Z</project.build.outputTimestamp>
     </properties>
 
     <dependencies>

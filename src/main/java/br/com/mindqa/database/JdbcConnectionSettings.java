@@ -1,12 +1,20 @@
 package br.com.mindqa.database;
 
 import java.net.URLEncoder;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 /** Valores validados e imutáveis usados durante uma única operação JDBC. */
 final class JdbcConnectionSettings {
+    private static final Set<String> RESERVED_DRIVER_PROPERTIES = Set.of("user", "password", "servername",
+            "portnumber", "databasename", "encrypt", "trustservercertificate", "logintimeout",
+            "connecttimeout", "oracle.jdbc.logintimeout");
     private enum DatabaseType {
         SQLSERVER(1433), POSTGRESQL(5432), ORACLE(1521), MYSQL(3306);
 
@@ -28,10 +36,12 @@ final class JdbcConnectionSettings {
     private final boolean poolEnabled;
     private final int poolMaxSize;
     private final int poolConnectionTimeoutMs;
+    private final Map<String, String> driverProperties;
 
     private JdbcConnectionSettings(DatabaseType databaseType, String databaseName, String jdbcUrl, String user,
             String password,
-            int queryTimeoutSeconds, int loginTimeoutSeconds, DatabaseConfiguration configuration) {
+            int queryTimeoutSeconds, int loginTimeoutSeconds, Map<String, String> driverProperties,
+            DatabaseConfiguration configuration) {
         this.databaseName = databaseName;
         this.databaseType = databaseType;
         this.jdbcUrl = jdbcUrl;
@@ -46,6 +56,7 @@ final class JdbcConnectionSettings {
         this.poolConnectionTimeoutMs = poolEnabled
                 ? parseIntegerProperty(configuration, "DB_POOL_CONNECTION_TIMEOUT_MS", 30000, 1000, Integer.MAX_VALUE)
                 : 30000;
+        this.driverProperties = Map.copyOf(driverProperties);
     }
 
     static JdbcConnectionSettings from(DatabaseConfiguration configuration, String dbName) {
@@ -68,8 +79,11 @@ final class JdbcConnectionSettings {
         String url;
         switch (type) {
             case SQLSERVER:
+                String encrypt = parseSqlServerEncrypt(configuration);
+                boolean trustServerCertificate = configuration.booleanValue("DB_TRUST_SERVER_CERTIFICATE", false);
                 url = "jdbc:sqlserver://" + host + ":" + port + ";databaseName="
-                        + escapeSqlServerDatabaseName(database) + ";encrypt=false;";
+                        + escapeSqlServerDatabaseName(database) + ";encrypt=" + encrypt
+                        + ";trustServerCertificate=" + trustServerCertificate + ";";
                 break;
             case ORACLE:
                 if (!database.matches("[a-zA-Z0-9_.$-]+")) {
@@ -90,7 +104,8 @@ final class JdbcConnectionSettings {
 
         return new JdbcConnectionSettings(type, database, url, user, password,
                 parseIntegerProperty(configuration, "DB_QUERY_TIMEOUT_SECONDS", 0, 0, Integer.MAX_VALUE),
-                parseIntegerProperty(configuration, "DB_LOGIN_TIMEOUT_SECONDS", 0, 0, 65535), configuration);
+                parseIntegerProperty(configuration, "DB_LOGIN_TIMEOUT_SECONDS", 0, 0, 65535),
+                parseDriverProperties(configuration), configuration);
     }
 
     String databaseName() {
@@ -123,6 +138,7 @@ final class JdbcConnectionSettings {
 
     Properties connectionProperties() {
         Properties properties = new Properties();
+        driverProperties.forEach(properties::setProperty);
         properties.setProperty("user", user);
         properties.setProperty("password", password);
         if (loginTimeoutSeconds > 0) {
@@ -138,6 +154,42 @@ final class JdbcConnectionSettings {
             }
         }
         return properties;
+    }
+
+    private static Map<String, String> parseDriverProperties(DatabaseConfiguration configuration) {
+        String value = configuration.get("DB_DRIVER_PROPERTIES");
+        if (isBlank(value)) {
+            return Map.of();
+        }
+        Map<String, String> properties = new LinkedHashMap<>();
+        Set<String> normalizedKeys = new HashSet<>();
+        for (String entry : value.split("&", -1)) {
+            int separator = entry.indexOf('=');
+            if (separator <= 0) {
+                throw invalidDriverProperties(configuration);
+            }
+            String key;
+            String propertyValue;
+            try {
+                key = URLDecoder.decode(entry.substring(0, separator), StandardCharsets.UTF_8).trim();
+                propertyValue = URLDecoder.decode(entry.substring(separator + 1), StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException exception) {
+                throw invalidDriverProperties(configuration);
+            }
+            String normalizedKey = key.toLowerCase(Locale.ROOT);
+            if (!key.matches("[a-zA-Z][a-zA-Z0-9._-]*")
+                    || RESERVED_DRIVER_PROPERTIES.contains(normalizedKey)
+                    || !normalizedKeys.add(normalizedKey)) {
+                throw invalidDriverProperties(configuration);
+            }
+            properties.put(key, propertyValue);
+        }
+        return properties;
+    }
+
+    private static IllegalArgumentException invalidDriverProperties(DatabaseConfiguration configuration) {
+        return new IllegalArgumentException(configuration.key("DB_DRIVER_PROPERTIES")
+                + " deve usar chave=valor&outra=valor, sem chaves duplicadas ou reservadas.");
     }
 
     private static DatabaseType parseDatabaseType(String value) {
@@ -158,6 +210,19 @@ final class JdbcConnectionSettings {
                 throw new IllegalArgumentException(
                         "DB_TYPE inválido. Use sqlserver, postgres, postgresql, oracle ou mysql.");
         }
+    }
+
+    private static String parseSqlServerEncrypt(DatabaseConfiguration configuration) {
+        String value = configuration.get("DB_ENCRYPT");
+        if (isBlank(value)) {
+            return "false";
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        if ("true".equals(normalized) || "false".equals(normalized) || "strict".equals(normalized)) {
+            return normalized;
+        }
+        throw new IllegalArgumentException(configuration.key("DB_ENCRYPT")
+                + " deve ser true, false ou strict.");
     }
 
     private static String formatHost(String value) {
