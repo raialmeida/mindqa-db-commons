@@ -1,7 +1,6 @@
 package br.com.mindqa.database;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
@@ -15,7 +14,8 @@ import org.apache.commons.dbutils.handlers.MapListHandler;
  * Operações JDBC para uma conexão selecionada por {@link DatabaseService#connection(String)}.
  * <p>Cada chamada usa uma configuração imutável e sua própria conexão em auto-commit.
  * Este cliente guarda somente o nome da conexão e pode ser reutilizado. Criá-lo não abre
- * conexões JDBC; a configuração é lida a cada operação. Não requer fechamento pelo consumidor.
+ * conexões JDBC; por padrão, a configuração é lida a cada operação. Cache e pool são opcionais.
+ * Não requer fechamento pelo consumidor; com pool, fechar a conexão a devolve ao pool.
  * Chamadas concorrentes não compartilham conexões ou estado mutável.
  * </p>
  */
@@ -99,7 +99,7 @@ public final class DatabaseClient {
     }
 
     private static Connection openConnection(JdbcConnectionSettings settings) throws SQLException {
-        return DriverManager.getConnection(settings.jdbcUrl(), settings.connectionProperties());
+        return JdbcConnectionPools.open(settings);
     }
 
     private static QueryRunner createQueryRunner(JdbcConnectionSettings settings) {

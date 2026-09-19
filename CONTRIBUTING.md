@@ -73,7 +73,6 @@ integração com PostgreSQL 16, SQL Server 2022, MySQL 8.4 e Oracle Free em cont
 mvn clean install
 ```
 
-Esse comando instala os três artefatos no Maven local. Publicação em repositório
-remoto depende do repositório e das credenciais definidos pela equipe. Antes de
+Esse comando instala os três artefatos no Maven local. Antes de
 uma publicação, revise a versão do artefato e a compatibilidade da API; atualizar
 o código local não publica uma nova versão.

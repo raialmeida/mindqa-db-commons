@@ -21,11 +21,27 @@ public final class DatabaseService {
      *
      * @param name nome da conexão; letras ASCII e números, começando com uma letra;
      *             ignora maiúsculas e espaços nas extremidades
-     * @return cliente imutável e reutilizável; sua configuração é lida em cada operação
+     * @return cliente imutável e reutilizável; sua configuração respeita a opção de cache
      * @throws IllegalArgumentException se o nome for nulo, vazio ou inválido
      */
     public static DatabaseClient connection(String name) {
         return new DatabaseClient(DatabaseConfiguration.normalizeConnectionName(name));
+    }
+
+    /**
+     * Descarta os snapshots de configuração. A próxima operação carrega a fonte novamente.
+     * Operações já iniciadas mantêm seu snapshot; os pools não são fechados por esta chamada.
+     */
+    public static void clearConfigurationCache() {
+        DatabaseConfigurationLoader.clearCache();
+    }
+
+    /**
+     * Fecha todos os pools desta biblioteca. Use no encerramento da suíte, após concluir as operações.
+     * Uma operação posterior pode criar novos pools. Também há fechamento no encerramento da JVM.
+     */
+    public static void closePools() {
+        JdbcConnectionPools.closeShared();
     }
 
     /**

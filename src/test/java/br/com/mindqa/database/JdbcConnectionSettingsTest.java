@@ -26,7 +26,7 @@ class JdbcConnectionSettingsTest {
         DriverPropertyInfo[] properties = new SQLServerDriver()
                 .getPropertyInfo(settings.jdbcUrl(), settings.connectionProperties());
         assertEquals(database, property(properties, "databaseName"));
-        assertEquals("false", property(properties, "encrypt"));
+        assertTrue("false".equalsIgnoreCase(property(properties, "encrypt")));
         assertEquals("qa_user", property(properties, "user"));
     }
 

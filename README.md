@@ -3,7 +3,8 @@
 Biblioteca Java para executar CRUD em **SQL Server, PostgreSQL, Oracle e MySQL**
 com configuração por variáveis de ambiente ou arquivos `.properties`.
 Use uma conexão padrão ou selecione conexões e bases diferentes no mesmo teste.
-Cada operação abre e fecha sua própria conexão JDBC.
+Por padrão, cada operação abre e fecha sua própria conexão JDBC. Pool de conexões
+e cache de configuração podem ser habilitados separadamente.
 
 Documentação completa: [Wiki do GitHub](https://github.com/raialmeida/mindqa-db-commons/wiki).
 
@@ -51,8 +52,8 @@ aberta. Não é necessário configurar servidores que você não utiliza.
 
 | Banco | Driver incluído | Porta padrão |
 | --- | --- | --- |
-| SQL Server | `com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11` | `1433` |
-| PostgreSQL | `org.postgresql:postgresql:42.7.2` | `5432` |
+| SQL Server | `com.microsoft.sqlserver:mssql-jdbc:13.6.0.jre11` | `1433` |
+| PostgreSQL | `org.postgresql:postgresql:42.7.13` | `5432` |
 | Oracle | `com.oracle.database.jdbc:ojdbc11:23.26.3.0.0` | `1521` |
 | MySQL | `com.mysql:mysql-connector-j:9.7.0` | `3306` |
 
@@ -483,8 +484,8 @@ erp.selectInDb("OUTROSERVICO", sql, id);
 ```
 
 O cliente guarda somente o nome e pode ser reutilizado em paralelo. Não abre JDBC
-ao ser criado e não precisa ser fechado; cada operação lê sua configuração e abre
-e fecha uma conexão independente. Não altere propriedades globais para trocar de
+ao ser criado e não precisa ser fechado; cada operação obtém sua configuração e usa
+uma conexão exclusiva enquanto executa. Não altere propriedades globais para trocar de
 banco durante testes paralelos: selecione o cliente apropriado.
 
 ### Escolha da conexão padrão
@@ -640,13 +641,74 @@ class ConsultaClienteTest {
 
 ## Conexões, erros e validação
 
-Cada chamada lê e valida sua configuração uma vez, preservando os mesmos valores
+### Reutilização opcional de conexões e configuração
+
+As duas otimizações ficam **desativadas por padrão**. As configurações existentes
+continuam abrindo uma conexão por operação e relendo o arquivo.
+
+Para uma conexão configurada com `DB_TYPE`, `DB_HOST` e demais chaves `DB_*`,
+adicione ao arquivo `.properties` ou exporte as variáveis equivalentes:
+
+```properties
+DB_CONFIG_CACHE_ENABLED=true
+DB_POOL_ENABLED=true
+DB_POOL_MAX_SIZE=5
+DB_POOL_CONNECTION_TIMEOUT_MS=30000
+```
+
+| Opção | Padrão | Comportamento |
+| --- | --- | --- |
+| `DB_CONFIG_CACHE_ENABLED` | `false` | Reutiliza a configuração carregada, evitando leitura e parsing do arquivo a cada operação. É uma opção global. |
+| `DB_POOL_ENABLED` | `false` | Reutiliza conexões JDBC com HikariCP, mantendo uma conexão exclusiva por operação em andamento. |
+| `DB_POOL_MAX_SIZE` | `5` | Máximo de conexões físicas por pool; mínimo `1`. |
+| `DB_POOL_CONNECTION_TIMEOUT_MS` | `30000` | Espera máxima por uma conexão disponível, em milissegundos; mínimo `1000`. Não substitui o login timeout do driver. |
+
+As opções de pool pertencem à conexão selecionada. Para a conexão `postgresql`,
+use `POSTGRESQL_POOL_ENABLED=true`; para uma conexão nomeada `principal`, use
+`DB_CONNECTIONS_PRINCIPAL_POOL_ENABLED=true`. Aplique os mesmos prefixos a
+`POOL_MAX_SIZE` e `POOL_CONNECTION_TIMEOUT_MS`. As opções `DB_POOL_*` não são
+herdadas pelas conexões nomeadas. A precedência das variáveis de ambiente sobre
+o arquivo continua valendo, inclusive para essas opções.
+
+Cada combinação de conexão, base, credenciais e opções do pool mantém seu próprio
+pool. Assim, `selectInDb` não mistura conexões de bases diferentes. São mantidos
+até 32 pools; destinos adicionais usam conexões diretas, abertas e fechadas por
+operação. Pools ociosos podem liberar conexões físicas, mas continuam registrados
+até o fechamento dos pools.
+
+O cache retém até 32 configurações, distinguindo arquivo selecionado, ambiente e
+classloader. Com cache ativo, alterações no conteúdo do arquivo só são percebidas
+após `DatabaseService.clearConfigurationCache()` ou remoção da entrada pelo limite
+do cache. Isso também vale para desativar o cache pelo próprio arquivo. A limpeza
+não interrompe operações iniciadas nem fecha os pools existentes.
+
+Ao finalizar a suíte, depois de todas as operações, libere os recursos:
+
+```java
+DatabaseService.closePools();
+DatabaseService.clearConfigurationCache();
+```
+
+Essas chamadas podem ficar em um método `@AfterAll` do JUnit. Uma operação posterior
+pode criar novos pools; eles também são fechados no encerramento normal da JVM.
+Após trocar credenciais, feche os pools antigos quando não houver operações em andamento.
+
+Use pool para operações CRUD independentes. Ele restaura estados JDBC como
+auto-commit, mas não desfaz comandos SQL que alteram a sessão, como `SET`, `USE`
+ou criação de tabelas temporárias. Se seus testes dependem de uma sessão nova
+a cada chamada, mantenha o pool desativado. Quando o pool está cheio e a espera
+expira, ocorre uma `SQLTransientConnectionException`; falhas de conexão que tenham
+uma `SQLException` original do driver preservam essa exceção.
+
+### Execução e tratamento de erros
+
+Cada chamada obtém e valida sua configuração uma vez, preservando os mesmos valores
 durante a execução. As configurações são imutáveis por
 chamada e os métodos podem ser usados concorrentemente, com conexões independentes.
 
 Cada chamada usa uma conexão independente em auto-commit e a fecha com
-`try-with-resources`, inclusive quando o SQL falha. Não há pool nem transação
-compartilhada entre chamadas; cada alteração bem-sucedida é confirmada
+`try-with-resources`, inclusive quando o SQL falha. Com pool habilitado, esse fechamento
+devolve a conexão ao pool. Não há transação compartilhada entre chamadas; cada alteração bem-sucedida é confirmada
 independentemente. O Apache DbUtils gerencia os statements e os result sets.
 
 Falhas JDBC propagam a `SQLException` original do driver, sem substituí-la por
@@ -743,14 +805,18 @@ src/
 │   ├── DatabaseClient.java
 │   ├── DatabaseConfiguration.java
 │   ├── DatabaseConfigurationLoader.java
+│   ├── DatabaseConfigurationCache.java
 │   ├── JdbcConnectionSettings.java
+│   ├── JdbcConnectionPools.java
 │   └── package-info.java
 └── test/
     ├── java/br/com/mindqa/database/
     │   ├── DatabaseServiceTest.java
     │   ├── DatabaseConfigurationTest.java
     │   ├── DatabaseConfigurationLoaderTest.java
+    │   ├── DatabaseConfigurationCacheTest.java
     │   ├── JdbcConnectionSettingsTest.java
+    │   ├── JdbcConnectionPoolsTest.java
     │   ├── support/
     │   │   ├── JdbcScenarioProcess.java
     │   │   └── JdbcScenarioRunner.java
@@ -768,7 +834,9 @@ src/
 | `DatabaseClient` | Execução de CRUD e ciclo de vida JDBC da conexão selecionada. | Pública |
 | `DatabaseConfigurationLoader` | Seleção e leitura das fontes de configuração. | Restrita ao pacote |
 | `DatabaseConfiguration` | Valores imutáveis, seleção de conexão e precedência das fontes. | Restrita ao pacote |
-| `JdbcConnectionSettings` | Valores JDBC validados, URL, credenciais e timeouts em segundos. | Restrita ao pacote |
+| `JdbcConnectionSettings` | Valores JDBC validados, URL, credenciais, timeouts e opções de pool. | Restrita ao pacote |
+| `DatabaseConfigurationCache` | Cache limitado de configurações com invalidação explícita. | Restrita ao pacote |
+| `JdbcConnectionPools` | Pools limitados e isolados por conexão, destino e credenciais. | Restrita ao pacote |
 
 O pacote principal agrupa a funcionalidade de banco de dados e mantém os detalhes
 internos encapsulados. Os testes usam o layout Maven padrão; `*Test` roda com

@@ -43,6 +43,7 @@ public final class JdbcScenarioProcess {
     private static String database;
     private static boolean useDatabaseOverride;
     private static DatabaseClient client;
+    private static boolean pooled;
     private static final Map<String, String> NAMED_URLS = Map.of(
             "principal", "jdbc:postgresql://pg.test:5432/shared",
             "legado", "jdbc:sqlserver://sql.test:1433;databaseName=shared;encrypt=false;",
@@ -54,6 +55,7 @@ public final class JdbcScenarioProcess {
 
     public static void main(String[] args) throws Exception {
         String action = args[0];
+        pooled = "pooled-crud".equals(action);
         useDatabaseOverride = !"-".equals(args[2]);
         database = "<null>".equals(args[2]) ? null : args[2];
         String name = System.getProperty("scenario.connection");
@@ -72,7 +74,14 @@ public final class JdbcScenarioProcess {
                     verifyMultipleConnections();
                     break;
                 case "crud":
+                case "pooled-crud":
                     verifyCrud();
+                    if (pooled) {
+                        assertEquals(1, driver.connections.size());
+                        SQLException failure = assertThrows(SQLException.class,
+                                () -> query("SELECT * FROM tabela_inexistente"));
+                        assertTrue(failure.getMessage().contains("tabela_inexistente"));
+                    }
                     break;
                 case "query-error":
                 case "update-error":
@@ -102,6 +111,8 @@ public final class JdbcScenarioProcess {
                     throw new AssertionError("Cenário desconhecido: " + action);
             }
         } finally {
+            DatabaseService.closePools();
+            DatabaseService.clearConfigurationCache();
             driver.assertConnectionsClosed();
             DriverManager.deregisterDriver(driver);
         }
@@ -218,7 +229,9 @@ public final class JdbcScenarioProcess {
             return useDatabaseOverride ? DatabaseService.selectInDb(database, sql, params)
                     : DatabaseService.select(sql, params);
         } finally {
-            driver.assertConnectionsClosed();
+            if (!pooled) {
+                driver.assertConnectionsClosed();
+            }
         }
     }
 
@@ -230,7 +243,9 @@ public final class JdbcScenarioProcess {
             return useDatabaseOverride ? DatabaseService.executeUpdateInDb(database, sql, params)
                     : DatabaseService.executeUpdate(sql, params);
         } finally {
-            driver.assertConnectionsClosed();
+            if (!pooled) {
+                driver.assertConnectionsClosed();
+            }
         }
     }
 

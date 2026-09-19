@@ -17,13 +17,27 @@ import java.util.Properties;
  */
 final class DatabaseConfigurationLoader {
     private static final String DEFAULT_RESOURCE = "database.properties";
+    private static final DatabaseConfigurationCache CACHE = new DatabaseConfigurationCache();
 
     private DatabaseConfigurationLoader() {
     }
 
     static DatabaseConfiguration load() {
-        return load(System.getenv(), (Properties) System.getProperties().clone(),
-                Thread.currentThread().getContextClassLoader());
+        Properties selectors = new Properties();
+        Properties system = System.getProperties();
+        synchronized (system) {
+            for (String key : new String[]{"db.config", "db.env"}) {
+                String value = system.getProperty(key);
+                if (value != null) {
+                    selectors.setProperty(key, value);
+                }
+            }
+        }
+        return load(System.getenv(), selectors, Thread.currentThread().getContextClassLoader());
+    }
+
+    static void clearCache() {
+        CACHE.clear();
     }
 
     static DatabaseConfiguration load(Map<String, String> environment, Properties systemProperties,
@@ -42,6 +56,20 @@ final class DatabaseConfigurationLoader {
             location = "classpath:" + DEFAULT_RESOURCE;
         }
 
+        DatabaseConfigurationCache.Key cacheKey = new DatabaseConfigurationCache.Key(
+                location, explicitSelection, classLoader, snapshot);
+        long generation = CACHE.generation();
+        DatabaseConfiguration cached = CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        DatabaseConfiguration loaded = read(location, explicitSelection, snapshot, classLoader);
+        return loaded.booleanValue("DB_CONFIG_CACHE_ENABLED", false)
+                ? CACHE.putIfAbsent(cacheKey, loaded, generation) : loaded;
+    }
+
+    private static DatabaseConfiguration read(String location, boolean explicitSelection,
+            Map<String, String> snapshot, ClassLoader classLoader) {
         Properties properties = new Properties();
         try {
             InputStream input = explicitSelection ? open(location, classLoader)

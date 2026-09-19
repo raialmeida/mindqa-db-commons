@@ -115,6 +115,8 @@ flowchart TD
 | `DatabaseConfigurationLoader` | Selecionar e ler o ambiente, o classpath e o arquivo externo. | Não abre conexões JDBC. |
 | `DatabaseConfiguration` | Preservar valores, selecionar o namespace da conexão e aplicar precedência. | Não executa I/O e não conhece os drivers. |
 | `JdbcConnectionSettings` | Validar as opções JDBC, aplicar padrões e montar a URL com escapes. | Não lê arquivos, altera estado global ou executa SQL. |
+| `DatabaseConfigurationCache` | Reter snapshots opcionais por fonte, ambiente e classloader. | LRU de até 32 entradas; limpeza explícita e proteção contra reinserção de leituras anteriores à limpeza. |
+| `JdbcConnectionPools` | Obter conexões diretas ou reutilizáveis com HikariCP. | Até 32 pools isolados por destino, credenciais e opções; destinos adicionais usam conexões diretas. |
 
 O `DatabaseClient` não substitui a `SQLException` por outra exceção. Ele preserva
 classe, mensagem, SQLState, código e cadeia de exceções do driver. Se a operação
@@ -186,10 +188,23 @@ Refatorações internas posteriores devem preservar pacotes, assinaturas e compo
 5. A operação usa parâmetros preparados e fecha seus recursos.
 6. Em caso de falha JDBC, a exceção original do driver chega ao consumidor.
 
-Cada chamada possui sua própria conexão, configuração e executor. Não há pool,
-transação compartilhada ou cache global de credenciais. As mudanças em arquivos
-de configuração são observadas em chamadas posteriores, sem alterar uma operação
-em andamento. As opções de conexão não modificam o timeout global do `DriverManager`.
+Cada chamada possui uma conexão exclusiva durante sua execução e seu próprio executor.
+Não há transação compartilhada. Por padrão, o arquivo é relido e a conexão física é
+fechada a cada chamada. `DB_CONFIG_CACHE_ENABLED` habilita snapshots reutilizáveis;
+`DB_POOL_ENABLED` habilita pool apenas para a conexão selecionada. Ambos são `false`
+por padrão. As opções não modificam o timeout global do `DriverManager`.
+
+O cache evita I/O em leituras subsequentes da mesma fonte. Leituras de arquivo e
+aberturas físicas de conexões acontecem fora dos locks dos registros compartilhados.
+`clearConfigurationCache()` invalida snapshots sem afetar operações em andamento;
+`closePools()` deve ser chamado após concluir as operações da suíte. O encerramento
+normal da JVM também fecha os pools. Mudanças de credenciais criam pools distintos.
+
+HikariCP controla concorrência, limite e devolução das conexões. A chave inclui
+nome, URL (com a base), propriedades JDBC, limites do pool e identidade do classloader.
+O pool usa auto-commit e não oferece isolamento de alterações arbitrárias de sessão
+feitas por SQL. Os limites, padrões e exemplos estão no
+[README](../README.md#reutilização-opcional-de-conexões-e-configuração).
 
 O auto-commit torna cada alteração independente. O dialecto SQL e os tipos dos
 valores de resultado seguem o driver selecionado. O código consumidor permanece
@@ -208,6 +223,8 @@ a abertura do socket, não todo o handshake de autenticação.
 | --- | --- |
 | `DatabaseConfigurationLoaderTest` | Arquivos, URI, classloader, UTF-8 e captura dos valores. |
 | `DatabaseConfigurationTest` | Seleção padrão/nomeada, isolamento de valores e precedência das fontes. |
+| `DatabaseConfigurationCacheTest` | Reutilização, invalidação concorrente, isolamento e limite do cache. |
+| `JdbcConnectionPoolsTest` | Reutilização física, isolamento, esgotamento, concorrência, fechamento e limite de pools. |
 | `JdbcConnectionSettingsTest` | Validação, URLs, parsing com os drivers e timeouts. |
 | `DatabaseServiceTest` | Contrato da API, clientes nomeados, CRUD, configuração, falhas, recursos e concorrência. |
 | `support.JdbcScenarioRunner` | Iniciar a JVM com ambiente e classpath isolados e conferir sua conclusão. |
@@ -229,7 +246,7 @@ do Maven. As classes em `support` não são testes autônomos nem código de pro
 
 A arquitetura deve evoluir quando houver um requisito verificável: por exemplo,
 mais motores JDBC com comportamentos distintos,
-transações entre chamadas ou volume de conexões que justifique pooling. Cada
+transações entre chamadas ou novas necessidades de gerenciamento de conexões. Cada
 capacidade precisa definir seu ciclo de vida, isolamento e compatibilidade antes
 de ampliar a API.
 

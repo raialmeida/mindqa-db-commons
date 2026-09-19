@@ -24,10 +24,14 @@ final class JdbcConnectionSettings {
     private final String password;
     private final int queryTimeoutSeconds;
     private final int loginTimeoutSeconds;
+    private final String connectionName;
+    private final boolean poolEnabled;
+    private final int poolMaxSize;
+    private final int poolConnectionTimeoutMs;
 
     private JdbcConnectionSettings(DatabaseType databaseType, String databaseName, String jdbcUrl, String user,
             String password,
-            int queryTimeoutSeconds, int loginTimeoutSeconds) {
+            int queryTimeoutSeconds, int loginTimeoutSeconds, DatabaseConfiguration configuration) {
         this.databaseName = databaseName;
         this.databaseType = databaseType;
         this.jdbcUrl = jdbcUrl;
@@ -35,6 +39,13 @@ final class JdbcConnectionSettings {
         this.password = password;
         this.queryTimeoutSeconds = queryTimeoutSeconds;
         this.loginTimeoutSeconds = loginTimeoutSeconds;
+        this.connectionName = configuration.connectionName();
+        this.poolEnabled = configuration.booleanValue("DB_POOL_ENABLED", false);
+        this.poolMaxSize = poolEnabled
+                ? parseIntegerProperty(configuration, "DB_POOL_MAX_SIZE", 5, 1, Integer.MAX_VALUE) : 5;
+        this.poolConnectionTimeoutMs = poolEnabled
+                ? parseIntegerProperty(configuration, "DB_POOL_CONNECTION_TIMEOUT_MS", 30000, 1000, Integer.MAX_VALUE)
+                : 30000;
     }
 
     static JdbcConnectionSettings from(DatabaseConfiguration configuration, String dbName) {
@@ -79,7 +90,7 @@ final class JdbcConnectionSettings {
 
         return new JdbcConnectionSettings(type, database, url, user, password,
                 parseIntegerProperty(configuration, "DB_QUERY_TIMEOUT_SECONDS", 0, 0, Integer.MAX_VALUE),
-                parseIntegerProperty(configuration, "DB_LOGIN_TIMEOUT_SECONDS", 0, 0, 65535));
+                parseIntegerProperty(configuration, "DB_LOGIN_TIMEOUT_SECONDS", 0, 0, 65535), configuration);
     }
 
     String databaseName() {
@@ -92,6 +103,22 @@ final class JdbcConnectionSettings {
 
     int queryTimeoutSeconds() {
         return queryTimeoutSeconds;
+    }
+
+    String connectionName() {
+        return connectionName;
+    }
+
+    boolean poolEnabled() {
+        return poolEnabled;
+    }
+
+    int poolMaxSize() {
+        return poolMaxSize;
+    }
+
+    int poolConnectionTimeoutMs() {
+        return poolConnectionTimeoutMs;
     }
 
     Properties connectionProperties() {

@@ -28,6 +28,21 @@ class DatabaseServiceTest {
     Path temporaryDirectory;
 
     @ParameterizedTest
+    @CsvSource({
+        "postgres,jdbc:postgresql://database.test:5432/qa_default",
+        "sqlserver,jdbc:sqlserver://database.test:1433;databaseName=qa_default;encrypt=false;",
+        "mysql,jdbc:mysql://database.test:3306/qa_default",
+        "oracle,jdbc:oracle:thin:@//database.test:1521/qa_default"
+    })
+    void supportsCrudWithPoolAndCacheEnabled(String type, String url) throws Exception {
+        Map<String, String> values = environment("DB_TYPE", type);
+        values.put("DB_POOL_ENABLED", "true");
+        values.put("DB_POOL_MAX_SIZE", "1");
+        values.put("DB_CONFIG_CACHE_ENABLED", "true");
+        run(values, "pooled-crud", url, "-");
+    }
+
+    @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {"  ", "\n\t"})
     void rejectsInvalidSqlBeforeLoadingConfiguration(String sql) {
