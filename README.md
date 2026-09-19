@@ -1,4 +1,11 @@
-# MindQA DB Commons
+<p align="center">
+  <img src="docs/images/mindqa-db-commons-banner.png"
+       alt="MindQA DB Commons"
+       width="100%">
+</p>
+
+[![MvnRepository](https://badges.mvnrepository.com/badge/io.github.raialmeida/mindqa-db-commons/badge.svg?label=MvnRepository&color=green)](https://mvnrepository.com/artifact/io.github.raialmeida/mindqa-db-commons)
+[![Java CI](https://github.com/raialmeida/mindqa-db-commons/actions/workflows/ci.yml/badge.svg)](https://github.com/raialmeida/mindqa-db-commons/actions/workflows/ci.yml)
 
 Biblioteca Java para executar CRUD em **SQL Server, PostgreSQL, Oracle e MySQL**
 com configuração por variáveis de ambiente ou arquivos `.properties`.
@@ -167,7 +174,7 @@ import br.com.mindqa.database.DatabaseService;
 | `select(String sql, Object... params)` | `List<Map<String, Object>>` |
 | `execute(String sql, Object... params)` | `int` |
 | `connection(String name)` | `DatabaseClient` para a conexão selecionada |
-| `DatabaseClient.database(String name)` | Novo `DatabaseClient` para outra base da mesma conexão |
+| `database(String name)` |`DatabaseClient` para outra base da mesma conexão |
 
 As operações estáticas usam a conexão e a base padrão. O cliente retornado por
 `connection(nome)` oferece `select` e `execute` para a conexão escolhida.
