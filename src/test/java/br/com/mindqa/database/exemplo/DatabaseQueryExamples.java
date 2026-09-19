@@ -36,17 +36,17 @@ public final class DatabaseQueryExamples {
      */
     public static int cadastrarNovoCliente(String nome, String email) throws SQLException {
         String clienteId = UUID.randomUUID().toString();
-        return DatabaseService.executeUpdate(
+        return DatabaseService.execute(
                 "INSERT INTO clientes (id, nome, email) VALUES (?, ?, ?)", clienteId, nome, email);
     }
 
     public static int atualizarEmailCliente(String clienteId, String novoEmail) throws SQLException {
-        return DatabaseService.executeUpdate(
+        return DatabaseService.execute(
                 "UPDATE clientes SET email = ? WHERE id = ?", novoEmail, clienteId);
     }
 
     public static int deletarCliente(String clienteId) throws SQLException {
-        return DatabaseService.executeUpdate("DELETE FROM clientes WHERE id = ?", clienteId);
+        return DatabaseService.execute("DELETE FROM clientes WHERE id = ?", clienteId);
     }
 
     public static List<Map<String, Object>> listarTodosOsClientes() throws SQLException {
@@ -59,17 +59,16 @@ public final class DatabaseQueryExamples {
     }
 
     /**
-     * Troca a base dentro do servidor da conexão padrão. No Oracle, troca o service
-     * name.
+     * Troca a base dentro do servidor PostgreSQL configurado.
      */
     public static List<Map<String, Object>> consultarOutroBancoDaInstancia(String nomeDoBanco, String clienteId) throws SQLException {
-        return DatabaseService.selectInDb(nomeDoBanco,
+        return DatabaseService.connection("postgresql").database(nomeDoBanco).select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
 
     /** Seleciona tanto a conexão SQL Server quanto uma base desse servidor. */
     public static List<Map<String, Object>> consultarEmBaseEspecificaSqlServer(String nomeBase, String clienteId) throws SQLException {
-        return DatabaseService.connection("sqlserver").selectInDb(nomeBase,
+        return DatabaseService.connection("sqlserver").database(nomeBase).select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
 
@@ -101,13 +100,13 @@ public final class DatabaseQueryExamples {
         String sql = "SELECT email FROM clientes WHERE id = ?";
 
         List<Map<String, Object>> postgres = DatabaseService.connection("postgresql")
-                .selectInDb("qa_clientes", sql, clienteId);
+                .database("qa_clientes").select(sql, clienteId);
         List<Map<String, Object>> sqlServer = DatabaseService.connection("sqlserver")
-                .selectInDb("qa_replica", sql, clienteId);
+                .database("qa_replica").select(sql, clienteId);
         List<Map<String, Object>> mysql = DatabaseService.connection("mysql")
-                .selectInDb("qa_loja", sql, clienteId);
+                .database("qa_loja").select(sql, clienteId);
         List<Map<String, Object>> oracle = DatabaseService.connection("oracle")
-                .selectInDb("FREEPDB1", sql, clienteId);
+                .database("FREEPDB1").select(sql, clienteId);
 
         for (List<Map<String, Object>> resultado : List.of(postgres, sqlServer, mysql, oracle)) {
             assertEquals(1, resultado.size(), "O cadastro deve existir em cada destino");
@@ -125,7 +124,7 @@ public final class DatabaseQueryExamples {
         String email = "qa-" + clienteId + "@example.com";
 
         try {
-            assertEquals(1, banco.executeUpdate(
+            assertEquals(1, banco.execute(
                     "INSERT INTO clientes (id, nome, email) VALUES (?, ?, ?)", clienteId, nome, email));
             List<Map<String, Object>> resultado = banco.select(
                     "SELECT nome, email FROM clientes WHERE id = ?", clienteId);
@@ -133,7 +132,7 @@ public final class DatabaseQueryExamples {
             assertEquals(nome, resultado.get(0).get("nome"));
             assertEquals(email, resultado.get(0).get("email"));
         } finally {
-            banco.executeUpdate("DELETE FROM clientes WHERE id = ?", clienteId);
+            banco.execute("DELETE FROM clientes WHERE id = ?", clienteId);
         }
     }
 }
