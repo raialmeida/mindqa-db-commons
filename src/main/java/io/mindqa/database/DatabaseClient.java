@@ -51,7 +51,7 @@ public final class DatabaseClient {
     }
 
     /**
-     * Consulta usando a conexão e a base selecionadas por este cliente.
+     * Consulta usando a conexão e a base selecionada por este cliente.
      *
      * @param sql    SQL com placeholders {@code ?} para valores
      * @param params valores na ordem dos placeholders; use {@code (Object) null}
@@ -80,7 +80,7 @@ public final class DatabaseClient {
     }
 
     /**
-     * Executa INSERT, UPDATE ou DELETE usando a conexão e a base selecionadas por
+     * Executa INSERT, UPDATE ou DELETE usando a conexão e a base selecionada por
      * este cliente.
      *
      * @param sql    SQL com placeholders {@code ?} para valores

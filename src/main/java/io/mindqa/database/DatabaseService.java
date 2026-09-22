@@ -66,7 +66,7 @@ public final class DatabaseService {
     }
 
     /**
-     * Consulta usando a conexão e a base padrão selecionadas pela configuração.
+     * Consulta usando a conexão e a base padrão selecionada pela configuração.
      *
      * @param sql    SQL com placeholders {@code ?} para valores
      * @param params valores na ordem dos placeholders; use {@code (Object) null}
@@ -91,7 +91,7 @@ public final class DatabaseService {
 
     /**
      * Executa INSERT, UPDATE ou DELETE usando a conexão e a base padrão
-     * selecionadas pela configuração.
+     * selecionada pela configuração.
      *
      * @param sql    SQL com placeholders {@code ?} para valores
      * @param params valores na ordem dos placeholders
