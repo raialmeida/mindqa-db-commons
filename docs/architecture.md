@@ -8,14 +8,17 @@ os métodos estáticos de `br.com.mindqa.database.DatabaseService`:
 
 - `select(sql, params)`
 - `execute(sql, params)`
+- `database(databaseName)`
 
-Os métodos estáticos usam a conexão padrão. `DatabaseService.connection(nome)`
-retorna um `DatabaseClient` com as mesmas operações para um destino nomeado.
-`connection(nome).database(base)` cria uma visão imutável do cliente para outra
-base no mesmo servidor, preservando as credenciais e opções da conexão.
+Os métodos estáticos usam a conexão padrão. `DatabaseService.database(databaseName)` cria
+uma visão imutável dessa conexão para outra base. `DatabaseService.connection(nome)`
+retorna um `DatabaseClient` com as mesmas operações para um destino nomeado, e
+`connection(nome).database(databaseName)` seleciona outra base desse destino. Em ambos os
+casos, as credenciais e demais opções da conexão são preservadas.
 O tipo do banco vem da configuração: SQL Server, PostgreSQL, Oracle ou MySQL.
-O consumidor não instancia configurações, drivers ou executores. As operações
-declaram `throws SQLException` e propagam a exceção original do driver em falhas JDBC.
+O consumidor não instancia configurações, drivers ou executores. Falhas JDBC são
+expostas como `DatabaseException`, e a exceção original do driver permanece
+disponível como causa.
 
 O código de produção depende de JDBC e Apache DbUtils, sem acoplamento a RestAssured,
 JUnit, TestNG, Cucumber ou ferramentas de interface. Pode ser usado em qualquer
@@ -48,7 +51,7 @@ chave obrigatória. Arquivos explicitamente selecionados devem existir.
 Para cada chave, `DatabaseConfiguration` prioriza a variável `DB_*` sobre o valor
 do arquivo, inclusive quando a variável está vazia. O arquivo aceita as formas
 `DB_*` e `db.*`, com prioridade para `DB_*`. `JdbcConnectionSettings` aplica os
-padrões e valida os valores resultantes. Em `database(nome)`, um nome de banco
+padrões e valida os valores resultantes. Em `database(databaseName)`, um nome de banco
 não vazio substitui `DB_NAME` na operação, mantendo tipo, host, porta e credenciais.
 
 A biblioteca não procura todos os arquivos `.properties` do consumidor. A convenção
@@ -86,8 +89,9 @@ Eles usam letras ASCII e números, começando com uma letra, para que a convers�
 entre propriedades e variáveis de ambiente seja unívoca.
 
 `connection(nome)` retorna um cliente imutável que guarda o nome da conexão;
-`database(nome)` devolve outro cliente imutável com a mesma conexão e a base escolhida. Eles não
-abre JDBC nem lê arquivos ao ser criado. A operação carrega uma configuração nova,
+`database(databaseName)` devolve outro cliente imutável com a mesma conexão e a base escolhida.
+`DatabaseService.database(databaseName)` aplica essa seleção à conexão padrão. Esses métodos não
+abrem JDBC nem leem arquivos ao criar o cliente. A operação carrega uma configuração nova,
 portanto reutilizar o cliente continua observando alterações posteriores no arquivo.
 O cliente padrão da fachada também não guarda configurações ou conexões.
 
@@ -106,7 +110,8 @@ flowchart TD
     Client --> Settings[JdbcConnectionSettings]
     Settings --> Configuration
     Client --> JDBC[JDBC e Apache DbUtils]
-    Client --> Error[SQLException do driver]
+    Client --> Error[DatabaseException]
+    Error --> Cause[SQLException original do driver]
 ```
 
 | Componente | Responsabilidade | Limite |
@@ -119,10 +124,12 @@ flowchart TD
 | `DatabaseConfigurationCache` | Reter snapshots opcionais por fonte, ambiente e classloader. | LRU de até 32 entradas; limpeza explícita e proteção contra reinserção de leituras anteriores à limpeza. |
 | `JdbcConnectionPools` | Obter conexões diretas ou reutilizáveis com HikariCP. | Até 32 pools isolados por destino, credenciais e opções; destinos adicionais usam conexões diretas. |
 
-O `DatabaseClient` não substitui a `SQLException` por outra exceção. Ele preserva
-classe, mensagem, SQLState, código e cadeia de exceções do driver. Se a operação
-falhar e o fechamento também falhar, `try-with-resources` anexa a segunda falha
-como exceção suprimida. A biblioteca não acrescenta SQL ou parâmetros à mensagem.
+O `DatabaseClient` converte falhas JDBC em `DatabaseException` para que o consumidor
+não precise declarar uma exceção verificada. A mensagem da exceção externa é a
+mesma do driver, e sua causa é a própria instância de `SQLException`, preservando
+classe, SQLState, código e cadeia de exceções. Se a operação e o fechamento
+falharem, `try-with-resources` anexa a segunda falha à `SQLException` original como
+exceção suprimida. A biblioteca não acrescenta SQL ou parâmetros à mensagem.
 
 O carregador fecha os recursos de leitura antes de devolver a configuração.
 `DatabaseConfiguration` copia os valores recebidos para mapas imutáveis.

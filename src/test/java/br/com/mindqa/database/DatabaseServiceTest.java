@@ -118,6 +118,16 @@ class DatabaseServiceTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"sqlserver", "postgres"})
+    void defaultConnectionSupportsDatabaseOverrideWithoutDbName(String type) throws Exception {
+        Map<String, String> environment = environment("DB_TYPE", type);
+        environment.remove("DB_NAME");
+        String url = ("sqlserver".equals(type) ? SQLSERVER_URL : POSTGRES_URL)
+                .replace("qa_default", "qa_other");
+        run(environment, "crud", url, "qa_other");
+    }
+
+    @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {"   "})
     void blankDatabaseOverrideFallsBackToEnvironment(String dbName) throws Exception {

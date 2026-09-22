@@ -3,7 +3,6 @@ package br.com.mindqa.database.exemplo;
 import br.com.mindqa.database.DatabaseClient;
 import br.com.mindqa.database.DatabaseService;
 
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,7 +25,7 @@ public final class DatabaseQueryExamples {
     private DatabaseQueryExamples() {
     }
 
-    public static List<Map<String, Object>> consultarClientesPorId(String clienteId) throws SQLException {
+    public static List<Map<String, Object>> consultarClientesPorId(String clienteId) {
         return DatabaseService.select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
@@ -34,26 +33,26 @@ public final class DatabaseQueryExamples {
     /**
      * O ID é gerado pelo teste; o retorno informa a quantidade de linhas inseridas.
      */
-    public static int cadastrarNovoCliente(String nome, String email) throws SQLException {
+    public static int cadastrarNovoCliente(String nome, String email) {
         String clienteId = UUID.randomUUID().toString();
         return DatabaseService.execute(
                 "INSERT INTO clientes (id, nome, email) VALUES (?, ?, ?)", clienteId, nome, email);
     }
 
-    public static int atualizarEmailCliente(String clienteId, String novoEmail) throws SQLException {
+    public static int atualizarEmailCliente(String clienteId, String novoEmail) {
         return DatabaseService.execute(
                 "UPDATE clientes SET email = ? WHERE id = ?", novoEmail, clienteId);
     }
 
-    public static int deletarCliente(String clienteId) throws SQLException {
+    public static int deletarCliente(String clienteId) {
         return DatabaseService.execute("DELETE FROM clientes WHERE id = ?", clienteId);
     }
 
-    public static List<Map<String, Object>> listarTodosOsClientes() throws SQLException {
+    public static List<Map<String, Object>> listarTodosOsClientes() {
         return DatabaseService.select("SELECT id, nome, email FROM clientes");
     }
 
-    public static List<Map<String, Object>> filtrarClientesPorNomeEDominio(String nomeComeco, String dominio) throws SQLException {
+    public static List<Map<String, Object>> filtrarClientesPorNomeEDominio(String nomeComeco, String dominio) {
         return DatabaseService.select("SELECT id, nome, email FROM clientes WHERE nome LIKE ? AND email LIKE ?",
                 nomeComeco + "%", "%" + dominio);
     }
@@ -61,33 +60,33 @@ public final class DatabaseQueryExamples {
     /**
      * Troca a base dentro do servidor PostgreSQL configurado.
      */
-    public static List<Map<String, Object>> consultarOutroBancoDaInstancia(String nomeDoBanco, String clienteId) throws SQLException {
+    public static List<Map<String, Object>> consultarOutroBancoDaInstancia(String nomeDoBanco, String clienteId) {
         return DatabaseService.connection("postgresql").database(nomeDoBanco).select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
 
     /** Seleciona tanto a conexão SQL Server quanto uma base desse servidor. */
-    public static List<Map<String, Object>> consultarEmBaseEspecificaSqlServer(String nomeBase, String clienteId) throws SQLException {
+    public static List<Map<String, Object>> consultarEmBaseEspecificaSqlServer(String nomeBase, String clienteId) {
         return DatabaseService.connection("sqlserver").database(nomeBase).select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
 
-    public static List<Map<String, Object>> consultarSqlServer(String clienteId) throws SQLException {
+    public static List<Map<String, Object>> consultarSqlServer(String clienteId) {
         return DatabaseService.connection("sqlserver").select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
 
-    public static List<Map<String, Object>> consultarPostgreSQL(String clienteId) throws SQLException {
+    public static List<Map<String, Object>> consultarPostgreSQL(String clienteId) {
         return DatabaseService.connection("postgresql").select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
 
-    public static List<Map<String, Object>> consultarMySQL(String clienteId) throws SQLException {
+    public static List<Map<String, Object>> consultarMySQL(String clienteId) {
         return DatabaseService.connection("mysql").select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
 
-    public static List<Map<String, Object>> consultarOracle(String clienteId) throws SQLException {
+    public static List<Map<String, Object>> consultarOracle(String clienteId) {
         return DatabaseService.connection("oracle").select(
                 "SELECT id, nome, email FROM clientes WHERE id = ?", clienteId);
     }
@@ -96,7 +95,7 @@ public final class DatabaseQueryExamples {
      * Consulta quatro motores e bases diferentes no mesmo fluxo de teste.
      * As bases e os registros devem existir antes da execução deste exemplo.
      */
-    public static void validarCadastroEmBancosEBasesDiferentes(String clienteId, String emailEsperado) throws SQLException {
+    public static void validarCadastroEmBancosEBasesDiferentes(String clienteId, String emailEsperado) {
         String sql = "SELECT email FROM clientes WHERE id = ?";
 
         List<Map<String, Object>> postgres = DatabaseService.connection("postgresql")
@@ -117,7 +116,7 @@ public final class DatabaseQueryExamples {
     /**
      * Prepara, valida e limpa o dado; cada operação confirma sua própria alteração.
      */
-    public static void testarCadastroComValidacao() throws SQLException {
+    public static void testarCadastroComValidacao() {
         DatabaseClient banco = DatabaseService.connection("postgresql");
         String clienteId = UUID.randomUUID().toString();
         String nome = "Cliente QA";

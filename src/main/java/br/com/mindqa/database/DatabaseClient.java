@@ -11,11 +11,17 @@ import org.apache.commons.dbutils.StatementConfiguration;
 import org.apache.commons.dbutils.handlers.MapListHandler;
 
 /**
- * Operações JDBC para uma conexão selecionada por {@link DatabaseService#connection(String)}.
- * <p>Cada chamada usa uma configuração imutável e sua própria conexão em auto-commit.
- * Este cliente guarda somente os nomes da conexão e da base selecionadas e pode ser reutilizado. Criá-lo não abre
- * conexões JDBC; por padrão, a configuração é lida a cada operação. Cache e pool são opcionais.
- * Não requer fechamento pelo consumidor; com pool, fechar a conexão a devolve ao pool.
+ * Operações JDBC para uma conexão selecionada por
+ * {@link DatabaseService#connection(String)}.
+ * <p>
+ * Cada chamada usa uma configuração imutável e sua própria conexão em
+ * auto-commit.
+ * Este cliente guarda somente os nomes da conexão e da base selecionadas e pode
+ * ser reutilizado. Criá-lo não abre
+ * conexões JDBC; por padrão, a configuração é lida a cada operação. Cache e
+ * pool são opcionais.
+ * Não requer fechamento pelo consumidor; com pool, fechar a conexão a devolve
+ * ao pool.
  * Chamadas concorrentes não compartilham conexões ou estado mutável.
  * </p>
  */
@@ -33,53 +39,77 @@ public final class DatabaseClient {
     }
 
     /**
-     * Seleciona outro banco preservando a conexão, as credenciais e as demais opções.
-     * Criar o cliente não abre uma conexão JDBC.
+     * Cria um cliente para outra base, preservando a conexão, as credenciais e as
+     * demais opções do cliente atual. A chamada não altera este cliente, não abre
+     * uma conexão JDBC nem carrega a configuração.
      *
-     * @param databaseName banco de destino (service name no Oracle); nulo ou em branco usa o banco configurado
-     * @return novo cliente imutável para o banco selecionado
+     * @param databaseName nome da base de destino ou service name no Oracle.
+     * @return novo cliente imutável com a base selecionada
      */
     public DatabaseClient database(String databaseName) {
         return new DatabaseClient(connectionName, databaseName);
     }
 
     /**
-     * Consulta o banco definido na configuração desta conexão.
+     * Consulta usando a conexão e a base selecionadas por este cliente.
      *
-     * @param sql SQL com placeholders {@code ?} para valores
-     * @param params valores na ordem dos placeholders; use {@code (Object) null} para SQL NULL
-     * @return linhas indexadas pelo nome ou alias das colunas, ou lista vazia
-     * @throws IllegalArgumentException se o SQL estiver vazio, o array de parâmetros for nulo
+     * @param sql    SQL com placeholders {@code ?} para valores
+     * @param params valores na ordem dos placeholders; use {@code (Object) null}
+     *               para SQL NULL
+     * @return lista de linhas, em que cada linha é um mapa indexado pelo nome ou
+     *         alias
+     *         da coluna; retorna uma lista vazia quando nenhum registro for
+     *         encontrado
+     * @throws IllegalArgumentException se o SQL estiver vazio, o array de
+     *                                  parâmetros for nulo
      *                                  ou a configuração for inválida
-     * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
-     * @throws SQLException erro original do driver ao conectar, consultar ou fechar a conexão
+     * @throws IllegalStateException    se a conexão não estiver configurada, faltar
+     *                                  configuração obrigatória
+     *                                  ou o arquivo não puder ser lido
+     * @throws DatabaseException        se ocorrer uma falha JDBC ao conectar,
+     *                                  consultar ou fechar
+     *                                  a conexão; a {@link SQLException} original
+     *                                  permanece como causa
      */
-    public List<Map<String, Object>> select(String sql, Object... params) throws SQLException {
+    public List<Map<String, Object>> select(String sql, Object... params) {
         validateArguments(sql, params);
         DatabaseConfiguration configuration = DatabaseConfigurationLoader.load().forConnection(connectionName);
         JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, databaseName);
-        try (Connection connection = openConnection(settings)) {
-            return createQueryRunner(settings).query(connection, sql, new MapListHandler(), params);
-        }
+        return withConnection(settings,
+                connection -> createQueryRunner(settings).query(connection, sql, new MapListHandler(), params));
     }
 
     /**
-     * Executa INSERT, UPDATE ou DELETE no banco configurado para esta conexão.
+     * Executa INSERT, UPDATE ou DELETE usando a conexão e a base selecionadas por
+     * este cliente.
      *
-     * @param sql SQL com placeholders {@code ?} para valores
+     * @param sql    SQL com placeholders {@code ?} para valores
      * @param params valores na ordem dos placeholders
      * @return quantidade de linhas afetadas, não o ID gerado
-     * @throws IllegalArgumentException se o SQL estiver vazio, o array de parâmetros for nulo
+     * @throws IllegalArgumentException se o SQL estiver vazio, o array de
+     *                                  parâmetros for nulo
      *                                  ou a configuração for inválida
-     * @throws IllegalStateException se faltar configuração obrigatória ou o arquivo não puder ser lido
-     * @throws SQLException erro original do driver ao conectar, alterar ou fechar a conexão
+     * @throws IllegalStateException    se a conexão não estiver configurada, faltar
+     *                                  configuração obrigatória
+     *                                  ou o arquivo não puder ser lido
+     * @throws DatabaseException        se ocorrer uma falha JDBC ao conectar,
+     *                                  executar a alteração
+     *                                  ou fechar a conexão; a {@link SQLException}
+     *                                  original permanece como causa
      */
-    public int execute(String sql, Object... params) throws SQLException {
+    public int execute(String sql, Object... params) {
         validateArguments(sql, params);
         DatabaseConfiguration configuration = DatabaseConfigurationLoader.load().forConnection(connectionName);
         JdbcConnectionSettings settings = JdbcConnectionSettings.from(configuration, databaseName);
+        return withConnection(settings,
+                connection -> createQueryRunner(settings).update(connection, sql, params));
+    }
+
+    private static <T> T withConnection(JdbcConnectionSettings settings, JdbcOperation<T> operation) {
         try (Connection connection = openConnection(settings)) {
-            return createQueryRunner(settings).update(connection, sql, params);
+            return operation.execute(connection);
+        } catch (SQLException exception) {
+            throw new DatabaseException(exception);
         }
     }
 
@@ -93,7 +123,8 @@ public final class DatabaseClient {
         return new QueryRunner(statement) {
             @Override
             protected void rethrow(SQLException cause, String sql, Object... params) throws SQLException {
-                // DbUtils adicionaria SQL e parâmetros à mensagem; preserve somente o erro original do driver.
+                // DbUtils adicionaria SQL e parâmetros à mensagem; preserve somente o erro
+                // original do driver.
                 throw cause;
             }
         };
@@ -107,5 +138,10 @@ public final class DatabaseClient {
             throw new IllegalArgumentException(
                     "O array de parâmetros não pode ser nulo. Use (Object) null para um valor SQL NULL.");
         }
+    }
+
+    @FunctionalInterface
+    private interface JdbcOperation<T> {
+        T execute(Connection connection) throws SQLException;
     }
 }

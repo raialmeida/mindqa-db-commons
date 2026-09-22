@@ -46,7 +46,7 @@ versão no Maven Central, adicione ao `pom.xml` do projeto de automação:
 <dependency>
     <groupId>io.github.raialmeida</groupId>
     <artifactId>mindqa-db-commons</artifactId>
-    <version>3.0.0</version>
+    <version>4.0.0</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -64,7 +64,7 @@ aberta. Não é necessário configurar servidores que você não utiliza.
 | Oracle | `com.oracle.database.jdbc:ojdbc11:23.26.3.0.0` | `1521` |
 | MySQL | `com.mysql:mysql-connector-j:9.7.0` | `3306` |
 
-Até a publicação de `3.0.0`, instale esta versão localmente com `mvn clean install`.
+Até a publicação de `4.0.0`, instale esta versão localmente com `mvn clean install`.
 Se estiver usando a versão publicada `1.0.1`, selecione o arquivo de configuração
 explicitamente e consulte a documentação correspondente àquela versão.
 
@@ -141,7 +141,6 @@ As variáveis de ambiente prevalecem sobre as mesmas chaves do arquivo carregado
 Outros arquivos `.properties` e arquivos `.env` não são descobertos automaticamente.
 Propriedades JVM como `-Ddb.host` não fornecem credenciais.
 Dentro de um teste, consulte pela API estática:
-Declare `throws SQLException` no método de teste, como nos exemplos completos abaixo.
 
 ```java
 import br.com.mindqa.database.DatabaseService;
@@ -173,15 +172,16 @@ import br.com.mindqa.database.DatabaseService;
 | --- | --- |
 | `select(String sql, Object... params)` | `List<Map<String, Object>>` |
 | `execute(String sql, Object... params)` | `int` |
+| `database(String name)` | `DatabaseClient` para outra base da conexão padrão |
 | `connection(String name)` | `DatabaseClient` para a conexão selecionada |
-| `database(String name)` |`DatabaseClient` para outra base da mesma conexão |
+| `connection(String name).database(String name)` | `DatabaseClient` para outra base da conexão selecionada |
 
 As operações estáticas usam a conexão e a base padrão. O cliente retornado por
 `connection(nome)` oferece `select` e `execute` para a conexão escolhida.
 O tipo do banco e as credenciais vêm da configuração, sem parâmetros adicionais
 de tipo nos métodos de consulta.
-As operações de CRUD declaram `throws SQLException`: erros JDBC são entregues
-diretamente pelo driver. Em JUnit, declare `throws SQLException` no método de teste.
+Falhas JDBC geram uma `DatabaseException`. Sua mensagem é a mesma do driver, e a
+`SQLException` original fica disponível em `getCause()` e `getSQLException()`.
 
 `select` retorna uma lista vazia quando não há resultados. Cada mapa representa uma
 linha e usa os nomes ou aliases das colunas como chaves; os valores mantêm os tipos
@@ -220,7 +220,20 @@ int atualizados = DatabaseService.execute(
 int removidos = DatabaseService.execute("DELETE FROM clientes WHERE id = ?", id);
 ```
 
-### Outro banco no mesmo servidor
+### Outra base na conexão padrão
+
+```java
+List<Map<String, Object>> produtos = DatabaseService
+        .database("ServeRestExemplo")
+        .select(
+                "SELECT Id, Nome, Preco, Descricao, Quantidade FROM dbo.Produtos WHERE Id = ?",
+                "produto-002");
+```
+
+`database(nome)` mantém tipo, host, porta, credenciais e demais opções da conexão
+padrão, alterando somente a base usada pela operação.
+
+### Outra base em uma conexão selecionada
 
 ```java
 // Mantém tipo, host, porta e credenciais da conexão selecionada.
@@ -248,6 +261,12 @@ O prefixo identifica o tipo e o nome da conexão, sem exigir `*_TYPE`:
 | SQL Server | `SQLSERVER_*` | `sqlserver` | `SQLSERVER_NAME=qa_database` |
 | MySQL | `MYSQL_*` | `mysql` | `MYSQL_NAME=qa_database` |
 | Oracle | `ORACLE_*` | `oracle` | `ORACLE_NAME=FREEPDB1` |
+
+Com apenas um desses prefixos configurado, a biblioteca seleciona essa conexão
+automaticamente. Com dois ou mais prefixos, defina `DB_DEFAULT_CONNECTION` para
+usar `DatabaseService.select(...)`, `DatabaseService.execute(...)` ou
+`DatabaseService.database(...)`. Se cada chamada usar
+`DatabaseService.connection("nome")`, o padrão pode ser omitido.
 
 O início rápido mostra uma configuração completa para PostgreSQL. Para outro
 motor, utilize seu prefixo nas mesmas chaves e ajuste os valores. As portas
@@ -423,7 +442,6 @@ uma base diferente com `database(nome)`.
 import br.com.mindqa.database.DatabaseService;
 import org.junit.jupiter.api.Test;
 
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -431,7 +449,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ConsultaMultiplosBancosTest {
     @Test
-    void deveConsultarDuasBasesNoMesmoTeste() throws SQLException {
+    void deveConsultarDuasBasesNoMesmoTeste() {
         String id = "cliente-1";
         String sql = "SELECT email FROM clientes WHERE id = ?";
 
@@ -543,7 +561,11 @@ banco durante testes paralelos: selecione o cliente apropriado.
 3. Configuração simples `DB_*`, se houver algum campo de conexão na raiz.
 4. A única conexão nomeada, incluindo prefixos por tipo, se não houver configuração simples.
 
-Com várias conexões e sem padrão, os métodos estáticos falham pedindo uma seleção.
+Com várias conexões nomeadas, incluindo vários prefixos por banco, e sem uma
+configuração simples `DB_*`, os métodos que dependem da conexão padrão exigem
+`DB_DEFAULT_CONNECTION`. Sem esse padrão, eles falham pedindo uma seleção
+explícita. Chamadas com `connection(nome)` não dependem de
+`DB_DEFAULT_CONNECTION`.
 Nomes desconhecidos, prefixos conflitantes para o mesmo nome ou configurações
 incompletas geram erro; não há fallback silencioso para outro destino.
 Sem nenhuma configuração de conexão, a biblioteca informa os campos obrigatórios
@@ -573,7 +595,6 @@ import br.com.mindqa.database.DatabaseService;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
 
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -584,7 +605,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class CadastroClienteTest {
     @Test
-    void deveCadastrarClienteEPersistirDados() throws SQLException {
+    void deveCadastrarClienteEPersistirDados() {
         String nome = "Cliente QA";
         String email = "qa-" + UUID.randomUUID() + "@example.com";
         String corpo = String.format("{\"nome\":\"%s\",\"email\":\"%s\"}", nome, email);
@@ -652,7 +673,6 @@ correspondente ao banco da API.
 import br.com.mindqa.database.DatabaseService;
 import org.junit.jupiter.api.Test;
 
-import java.sql.SQLException;
 import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
@@ -661,7 +681,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ConsultaClienteTest {
     @Test
-    void deveConsultarClienteAtualizado() throws SQLException {
+    void deveConsultarClienteAtualizado() {
         String id = UUID.randomUUID().toString();
         String email = "qa-" + id + "@example.com";
 
@@ -745,8 +765,8 @@ Use pool para operações CRUD independentes. Ele restaura estados JDBC como
 auto-commit, mas não desfaz comandos SQL que alteram a sessão, como `SET`, `USE`
 ou criação de tabelas temporárias. Se seus testes dependem de uma sessão nova
 a cada chamada, mantenha o pool desativado. Quando o pool está cheio e a espera
-expira, ocorre uma `SQLTransientConnectionException`; falhas de conexão que tenham
-uma `SQLException` original do driver preservam essa exceção.
+expira, a `SQLTransientConnectionException` original fica disponível como causa
+da `DatabaseException`.
 
 ### Execução e tratamento de erros
 
@@ -759,19 +779,19 @@ Cada chamada usa uma conexão independente em auto-commit e a fecha com
 devolve a conexão ao pool. Não há transação compartilhada entre chamadas; cada alteração bem-sucedida é confirmada
 independentemente. O Apache DbUtils gerencia os statements e os result sets.
 
-Falhas JDBC propagam a `SQLException` original do driver, sem substituí-la por
-uma exceção da biblioteca. A classe, a mensagem, `getSQLState()`, `getErrorCode()`
-e a cadeia de `getNextException()` ficam disponíveis ao consumidor. Se a operação
-e o fechamento falharem, a falha de fechamento estará em `getSuppressed()`.
-A biblioteca não acrescenta o SQL nem os parâmetros à mensagem, mas o próprio
-driver pode incluir informações do comando. Métodos de teste JUnit podem declarar
-`throws SQLException`, sem tratamento manual quando basta deixar o teste falhar.
+Falhas JDBC lançam `DatabaseException`, uma exceção não verificada cuja mensagem
+é exatamente a mensagem da `SQLException` original. A mesma instância original
+fica disponível em `getCause()` e `getSQLException()`, preservando sua classe,
+`getSQLState()`, `getErrorCode()` e a cadeia de `getNextException()`. Se a operação
+e o fechamento falharem, a falha de fechamento estará em
+`getSQLException().getSuppressed()`. A biblioteca não acrescenta o SQL nem os
+parâmetros à mensagem, mas o próprio driver pode incluir informações do comando.
 
 | Exceção | Situações principais |
 | --- | --- |
 | `IllegalStateException` | Arquivo ausente ou ilegível, campo obrigatório ausente, conexão desconhecida ou seleção ambígua. |
 | `IllegalArgumentException` | SQL ou parâmetros inválidos, nome de conexão inválido, tipo conflitante, porta, host, service name ou timeout inválidos. |
-| `SQLException` | Falha JDBC original ao conectar, executar SQL ou fechar a conexão. |
+| `DatabaseException` | Falha ao conectar, executar SQL ou fechar a conexão; contém a `SQLException` original. |
 
 ## Desenvolvimento e testes
 
@@ -785,9 +805,9 @@ JAR usam um timestamp controlado por `project.build.outputTimestamp`.
 
 Artefatos gerados:
 
-- `target/mindqa-db-commons-3.0.0.jar`: biblioteca com licença MIT no `META-INF`.
-- `target/mindqa-db-commons-3.0.0-sources.jar`: fontes para navegação na IDE.
-- `target/mindqa-db-commons-3.0.0-javadoc.jar`: documentação da API.
+- `target/mindqa-db-commons-4.0.0.jar`: biblioteca com licença MIT no `META-INF`.
+- `target/mindqa-db-commons-4.0.0-sources.jar`: fontes para navegação na IDE.
+- `target/mindqa-db-commons-4.0.0-javadoc.jar`: documentação da API.
 
 ### Testes sem servidor de banco
 
@@ -851,6 +871,7 @@ src/
 ├── main/java/br/com/mindqa/database/
 │   ├── DatabaseService.java
 │   ├── DatabaseClient.java
+│   ├── DatabaseException.java
 │   ├── DatabaseConfiguration.java
 │   ├── DatabaseConfigurationLoader.java
 │   ├── DatabaseConfigurationCache.java

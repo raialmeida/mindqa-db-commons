@@ -1,6 +1,5 @@
 package br.com.mindqa.database.integration;
 
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +7,7 @@ import java.util.UUID;
 
 import br.com.mindqa.database.DatabaseService;
 import br.com.mindqa.database.DatabaseClient;
+import br.com.mindqa.database.DatabaseException;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DatabaseServiceIT {
     @Test
     @EnabledIfSystemProperty(named = "db.integration.connections", matches = ".+")
-    void isolatesDifferentConnectionsAndDatabasesInTheSameTest() throws SQLException {
+    void isolatesDifferentConnectionsAndDatabasesInTheSameTest() {
         String[] names = System.getProperty("db.integration.connections").split(",");
         assertTrue(names.length >= 2, "Informe pelo menos duas conexões nomeadas");
         String alternate = System.getProperty("db.integration.alternate", "qa_other");
@@ -44,11 +44,11 @@ class DatabaseServiceIT {
                 assertEquals(target[0] + ":" + target[1], rows.get(0).get("nome"));
             }
         } finally {
-            SQLException cleanupFailure = null;
+            DatabaseException cleanupFailure = null;
             for (String[] target : created) {
                 try {
                     DatabaseService.connection(target[0]).database(target[1]).execute("DROP TABLE " + table);
-                } catch (SQLException exception) {
+                } catch (DatabaseException exception) {
                     if (cleanupFailure == null) {
                         cleanupFailure = exception;
                     } else {
@@ -63,7 +63,7 @@ class DatabaseServiceIT {
     }
 
     @Test
-    void executesCrudUsingActualConfiguredDriver() throws SQLException {
+    void executesCrudUsingActualConfiguredDriver() {
         String table = "mindqa_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
         DatabaseService.execute("CREATE TABLE " + table + " (id INTEGER PRIMARY KEY, nome VARCHAR(100))");
         try {
