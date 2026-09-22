@@ -1,13 +1,13 @@
-package br.com.mindqa.database.integration;
+package io.mindqa.database.integration;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import br.com.mindqa.database.DatabaseService;
-import br.com.mindqa.database.DatabaseClient;
-import br.com.mindqa.database.DatabaseException;
+import io.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseClient;
+import io.mindqa.database.DatabaseException;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;

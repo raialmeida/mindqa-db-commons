@@ -1,7 +1,7 @@
-package br.com.mindqa.database.exemplo;
+package io.mindqa.database.exemplo;
 
-import br.com.mindqa.database.DatabaseClient;
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseClient;
+import io.mindqa.database.DatabaseService;
 
 import java.util.List;
 import java.util.Map;

@@ -4,7 +4,7 @@
 
 `mindqa-db-commons` é uma biblioteca Maven pequena, dedicada a operações JDBC em
 automações de testes. O consumidor fornece a configuração de conexão e utiliza
-os métodos estáticos de `br.com.mindqa.database.DatabaseService`:
+os métodos estáticos de `io.mindqa.database.DatabaseService`:
 
 - `select(sql, params)`
 - `execute(sql, params)`
@@ -142,7 +142,7 @@ chaves próprias e não podem ser sobrescritos por propriedades genéricas.
 ## Organização dos pacotes
 
 O código de produção fica em um único pacote funcional:
-`br.com.mindqa.database`. `DatabaseConfiguration`, `DatabaseConfigurationLoader`
+`io.mindqa.database`. `DatabaseConfiguration`, `DatabaseConfigurationLoader`
 e `JdbcConnectionSettings` possuem acesso restrito a esse pacote. Essa fronteira
 impede que projetos consumidores dependam diretamente dos detalhes internos,
 conforme as [regras de acesso da linguagem Java](https://docs.oracle.com/javase/specs/jls/se11/html/jls-6.html#jls-6.6.1).

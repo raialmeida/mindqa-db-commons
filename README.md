@@ -143,7 +143,7 @@ Propriedades JVM como `-Ddb.host` não fornecem credenciais.
 Dentro de um teste, consulte pela API estática:
 
 ```java
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseService;
 
 import java.util.List;
 import java.util.Map;
@@ -165,7 +165,7 @@ pode ser omitido.
 ## API pública
 
 ```java
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseService;
 ```
 
 | Método | Retorno |
@@ -199,7 +199,7 @@ O exemplo abaixo prepara um cliente, consulta seus dados, atualiza o nome e
 remove o registro ao terminar. O email único evita reutilizar o dado de outra execução.
 
 ```java
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseService;
 
 import java.util.List;
 import java.util.Map;
@@ -439,7 +439,7 @@ quatro motores. No teste, escolha a conexão pelo nome e, quando necessário, in
 uma base diferente com `database(nome)`.
 
 ```java
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -471,7 +471,7 @@ class ConsultaMultiplosBancosTest {
 
 O exemplo pressupõe que o mesmo `id` exista nas duas bases. Para SQL Server ou
 Oracle, troque apenas o nome da conexão e o nome da base. A classe
-[DatabaseQueryExamples](src/test/java/br/com/mindqa/database/exemplo/DatabaseQueryExamples.java)
+[DatabaseQueryExamples](src/test/java/io/mindqa/database/exemplo/DatabaseQueryExamples.java)
 também contém exemplos compiláveis de CRUD e consulta em múltiplos motores e bases.
 Seus métodos ilustrativos não executam automaticamente no build.
 
@@ -535,8 +535,8 @@ dentro da mesma fonte. Prefira uma única forma por conexão. Nenhuma conexão n
 herda credenciais ou timeouts da raiz `DB_*` ou de outros nomes.
 
 ```java
-import br.com.mindqa.database.DatabaseClient;
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseClient;
+import io.mindqa.database.DatabaseService;
 
 String id = "cliente-1";
 String sql = "SELECT nome FROM clientes WHERE id = ?";
@@ -591,7 +591,7 @@ PostgreSQL, Oracle ou MySQL. O tipo não precisa ser passado nos métodos Java.
 Crie `src/test/java/CadastroClienteTest.java` no projeto de automação:
 
 ```java
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseService;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
 
@@ -660,7 +660,7 @@ o cadastro também criar registros em outras tabelas.
 Para validar o cadastro em uma conexão nomeada, crie
 `DatabaseClient banco = DatabaseService.connection("principal")` no teste e use
 `banco.select(...)` na consulta e `banco.execute(...)` na limpeza. Importe
-`br.com.mindqa.database.DatabaseClient`. O POST com RestAssured permanece igual.
+`io.mindqa.database.DatabaseClient`. O POST com RestAssured permanece igual.
 
 ### GET: consultar dados preparados pelo teste
 
@@ -670,7 +670,7 @@ PostgreSQL, SQL Server ou outro motor suportado, selecionando a conexão padrão
 correspondente ao banco da API.
 
 ```java
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseService;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -824,7 +824,7 @@ transitivas dos consumidores.
 ### Integração com bancos reais
 
 O perfil `database-integration` executa `DatabaseServiceIT` pelo Maven Failsafe.
-Esse teste fica no pacote `br.com.mindqa.database.integration` e usa somente a API
+Esse teste fica no pacote `io.mindqa.database.integration` e usa somente a API
 pública da biblioteca.
 Configure uma instância de testes acessível, com permissão para criar e remover
 tabelas, e execute:
@@ -868,7 +868,7 @@ são containers descartáveis, com credenciais exclusivas para esses testes.
 
 ```text
 src/
-├── main/java/br/com/mindqa/database/
+├── main/java/io/mindqa/database/
 │   ├── DatabaseService.java
 │   ├── DatabaseClient.java
 │   ├── DatabaseException.java
@@ -879,7 +879,7 @@ src/
 │   ├── JdbcConnectionPools.java
 │   └── package-info.java
 └── test/
-    ├── java/br/com/mindqa/database/
+    ├── java/io/mindqa/database/
     │   ├── DatabaseServiceTest.java
     │   ├── DatabaseConfigurationTest.java
     │   ├── DatabaseConfigurationLoaderTest.java

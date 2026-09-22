@@ -1,4 +1,4 @@
-package br.com.mindqa.database.support;
+package io.mindqa.database.support;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -27,9 +27,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
-import br.com.mindqa.database.DatabaseClient;
-import br.com.mindqa.database.DatabaseException;
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseClient;
+import io.mindqa.database.DatabaseException;
+import io.mindqa.database.DatabaseService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -435,7 +435,7 @@ public final class JdbcScenarioProcess {
 
         @Override
         public Logger getParentLogger() {
-            return Logger.getLogger("br.com.mindqa.database.test");
+            return Logger.getLogger("io.mindqa.database.test");
         }
     }
 }

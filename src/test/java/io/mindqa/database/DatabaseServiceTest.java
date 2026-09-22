@@ -1,4 +1,4 @@
-package br.com.mindqa.database;
+package io.mindqa.database;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
-import br.com.mindqa.database.support.JdbcScenarioRunner;
+import io.mindqa.database.support.JdbcScenarioRunner;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

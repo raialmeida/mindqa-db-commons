@@ -154,7 +154,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>br.com.mindqa.database</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.mindqa.database</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>
