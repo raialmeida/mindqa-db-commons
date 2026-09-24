@@ -7,12 +7,9 @@ import java.util.Map;
  * CRUD para SQL Server, PostgreSQL, Oracle e MySQL.
  * <p>
  * Os métodos estáticos usam a conexão padrão. Para selecionar uma conexão
- * nomeada,
- * use {@link #connection(String)}. O tipo e as credenciais vêm do ambiente ou
- * do arquivo
- * {@code .properties}. Cada operação usa uma conexão exclusiva em auto-commit e
- * a fecha ou
- * devolve ao pool ao terminar.
+ * nomeada, use {@link #connection(String)}. O tipo e as credenciais vêm do
+ * ambiente ou do arquivo {@code .properties}. Cada operação usa sua própria
+ * conexão em auto-commit e a fecha ou devolve ao pool ao terminar.
  * </p>
  */
 public final class DatabaseService {
@@ -38,7 +35,8 @@ public final class DatabaseService {
      * Cria um cliente para outra base da conexão padrão. A chamada não altera a
      * conexão padrão, não abre uma conexão JDBC nem carrega a configuração.
      *
-     * @param databaseName nome da base de destino ou service name no Oracle.
+     * @param databaseName nome da base de destino ou service name no Oracle;
+     *                     nulo ou em branco usa a base configurada
      * @return novo cliente imutável com a base selecionada na conexão padrão
      */
     public static DatabaseClient database(String databaseName) {

@@ -2,9 +2,10 @@
 
 ## Preparar o ambiente
 
-Use JDK 11 ou superior e Maven 3.6.3 ou superior. `JAVA_HOME` deve apontar para um
-JDK válido. O projeto compila com `--release 11`, inclusive quando o build usa um
-JDK mais recente.
+Use JDK 17 ou superior e Maven 3.6.3 ou superior para construir o projeto:
+JUnit 6, usado nos testes, requer Java 17. `JAVA_HOME` deve apontar para um JDK
+válido. A biblioteca é compilada com `--release 11` e continua compatível com
+projetos consumidores em Java 11.
 
 ```bash
 java -version
@@ -64,7 +65,7 @@ Também é possível fornecer somente variáveis `DB_*`. O teste cria uma tabela
 nome único e a remove ao terminar. `DatabaseServiceIT` deve exercitar o projeto
 como um consumidor, importando somente os tipos públicos.
 
-O [workflow de CI](.github/workflows/ci.yml) verifica JDK 11, 17 e 21 e executa
+O [workflow de CI](.github/workflows/ci.yml) verifica JDK 17 e 21 e executa
 integração com PostgreSQL 16, SQL Server 2022, MySQL 8.4 e Oracle Free em containers descartáveis.
 
 ## Distribuição

@@ -17,6 +17,7 @@ public final class DatabaseException extends RuntimeException {
      * Cria uma falha de banco preservando a exceção JDBC recebida.
      *
      * @param cause exceção original lançada pelo driver ou pela infraestrutura JDBC
+     * @throws IllegalArgumentException se {@code cause} for nula
      */
     public DatabaseException(SQLException cause) {
         super(requireCause(cause).getMessage(), cause);

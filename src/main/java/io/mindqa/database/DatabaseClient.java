@@ -43,7 +43,8 @@ public final class DatabaseClient {
      * demais opções do cliente atual. A chamada não altera este cliente, não abre
      * uma conexão JDBC nem carrega a configuração.
      *
-     * @param databaseName nome da base de destino ou service name no Oracle.
+     * @param databaseName nome da base de destino ou service name no Oracle;
+     *                     nulo ou em branco usa a base configurada
      * @return novo cliente imutável com a base selecionada
      */
     public DatabaseClient database(String databaseName) {
