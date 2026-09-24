@@ -22,7 +22,7 @@ disponível como causa.
 
 O código de produção depende de JDBC e Apache DbUtils, sem acoplamento a RestAssured,
 JUnit, TestNG, Cucumber ou ferramentas de interface. Pode ser usado em qualquer
-automação que execute Java 11+ e possua acesso ao banco configurado. As chamadas
+automação que execute Java 17+ e possua acesso ao banco configurado. As chamadas
 JDBC são síncronas; o framework consumidor define quando e em qual thread executá-las.
 
 ## Uso no projeto de automação

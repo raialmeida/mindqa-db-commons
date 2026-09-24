@@ -4,8 +4,7 @@
 
 Use JDK 17 ou superior e Maven 3.6.3 ou superior para construir o projeto:
 JUnit 6, usado nos testes, requer Java 17. `JAVA_HOME` deve apontar para um JDK
-válido. A biblioteca é compilada com `--release 11` e continua compatível com
-projetos consumidores em Java 11.
+válido. A biblioteca também é compilada com `--release 17`.
 
 ```bash
 java -version

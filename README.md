@@ -15,7 +15,7 @@ e cache de configuração podem ser habilitados separadamente.
 
 Documentação completa: [Wiki do GitHub](https://github.com/raialmeida/mindqa-db-commons/wiki).
 
-Funciona em automações Java 11+ de API, interface e integração. Pode ser usada com
+Funciona em automações Java 17+ de API, interface e integração. Pode ser usada com
 RestAssured, Selenium, Cucumber, JUnit ou TestNG. O código da biblioteca não depende
 desses frameworks; JUnit e H2 são usados somente nos testes do próprio projeto.
 
@@ -28,7 +28,7 @@ desses frameworks; JUnit e H2 são usados somente nos testes do próprio projeto
 
 ## Instalação
 
-Para consumir a biblioteca, use Java 11 ou superior. Adicione a dependência
+Para consumir a biblioteca, use Java 17 ou superior. Adicione a dependência
 ao projeto de automação:
 
 ```xml
@@ -135,8 +135,8 @@ As decisões internas de organização estão em [Arquitetura](docs/architecture
 ## Desenvolvimento e testes
 
 Para construir este checkout, use JDK 17 ou superior e Maven 3.6.3 ou superior:
-os testes dependem de JUnit 6, que requer Java 17. O JAR da biblioteca continua
-compilado para Java 11.
+os testes dependem de JUnit 6, que requer Java 17. A biblioteca também é
+compilada com `--release 17`.
 
 ```bash
 mvn clean verify
