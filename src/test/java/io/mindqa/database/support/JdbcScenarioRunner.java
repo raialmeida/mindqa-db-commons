@@ -1,4 +1,4 @@
-package br.com.mindqa.database.support;
+package io.mindqa.database.support;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;

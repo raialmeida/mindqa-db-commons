@@ -1,4 +1,4 @@
-package br.com.mindqa.database;
+package io.mindqa.database;
 
 import java.util.HashMap;
 import java.util.Locale;

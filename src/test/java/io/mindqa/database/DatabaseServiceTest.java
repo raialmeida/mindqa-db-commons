@@ -1,4 +1,4 @@
-package br.com.mindqa.database;
+package io.mindqa.database;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
-import br.com.mindqa.database.support.JdbcScenarioRunner;
+import io.mindqa.database.support.JdbcScenarioRunner;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -115,6 +115,16 @@ class DatabaseServiceTest {
                 .replace("qa_default", "qa_other");
         run(environment, "crud", url, "qa_other", "-Dscenario.connection=target",
                 "-Dscenario.password=" + environment.get("DB_CONNECTIONS_TARGET_PASS"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"sqlserver", "postgres"})
+    void defaultConnectionSupportsDatabaseOverrideWithoutDbName(String type) throws Exception {
+        Map<String, String> environment = environment("DB_TYPE", type);
+        environment.remove("DB_NAME");
+        String url = ("sqlserver".equals(type) ? SQLSERVER_URL : POSTGRES_URL)
+                .replace("qa_default", "qa_other");
+        run(environment, "crud", url, "qa_other");
     }
 
     @ParameterizedTest

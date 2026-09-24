@@ -1,4 +1,4 @@
-package br.com.mindqa.database.support;
+package io.mindqa.database.support;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -27,8 +27,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
-import br.com.mindqa.database.DatabaseClient;
-import br.com.mindqa.database.DatabaseService;
+import io.mindqa.database.DatabaseClient;
+import io.mindqa.database.DatabaseException;
+import io.mindqa.database.DatabaseService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -78,7 +79,7 @@ public final class JdbcScenarioProcess {
                     verifyCrud();
                     if (pooled) {
                         assertEquals(1, driver.connections.size());
-                        SQLException failure = assertThrows(SQLException.class,
+                        DatabaseException failure = assertThrows(DatabaseException.class,
                                 () -> query("SELECT * FROM tabela_inexistente"));
                         assertTrue(failure.getMessage().contains("tabela_inexistente"));
                     }
@@ -118,7 +119,7 @@ public final class JdbcScenarioProcess {
         }
     }
 
-    private static void verifyCrud() throws SQLException {
+    private static void verifyCrud() {
         update("CREATE TABLE clientes (id INTEGER PRIMARY KEY, nome VARCHAR(100), email VARCHAR(150))");
         assertTrue(query("SELECT * FROM clientes").isEmpty());
 
@@ -149,13 +150,16 @@ public final class JdbcScenarioProcess {
 
     private static void verifySqlFailure(String action) {
         boolean update = "update-error".equals(action);
-        SQLException exception = assertThrows(SQLException.class, () -> {
+        DatabaseException failure = assertThrows(DatabaseException.class, () -> {
             if (update) {
                 update("UPDATE tabela_inexistente SET nome = ?", "novo");
             } else {
                 query("SELECT * FROM tabela_inexistente WHERE id = ?", 1);
             }
         });
+        SQLException exception = failure.getSQLException();
+        assertSame(exception, failure.getCause());
+        assertEquals(exception.getMessage(), failure.getMessage());
         assertEquals(1, driver.attempts.get());
         if ("connection-error".equals(action) || "changed-config-error".equals(action)) {
             assertSame(driver.connectionFailure, exception);
@@ -173,7 +177,7 @@ public final class JdbcScenarioProcess {
     }
 
     private static void verifyInjectedFailure(String action) {
-        SQLException exception = assertThrows(SQLException.class, () -> {
+        DatabaseException failure = assertThrows(DatabaseException.class, () -> {
             if (action.contains("update")) {
                 if (action.startsWith("close-")) {
                     update("CREATE TABLE teste_fechamento (id INTEGER)");
@@ -184,7 +188,10 @@ public final class JdbcScenarioProcess {
                 query("SELECT ? AS valor", "parametro-confidencial");
             }
         });
+        SQLException exception = failure.getSQLException();
         SQLException expected = action.startsWith("close-") ? driver.closeFailure : driver.statementFailure;
+        assertSame(exception, failure.getCause());
+        assertEquals(exception.getMessage(), failure.getMessage());
         assertSame(expected, exception);
         assertEquals(expected.getSQLState(), exception.getSQLState());
         assertEquals(expected.getErrorCode(), exception.getErrorCode());
@@ -221,11 +228,14 @@ public final class JdbcScenarioProcess {
         }
     }
 
-    private static List<Map<String, Object>> query(String sql, Object... params) throws SQLException {
+    private static List<Map<String, Object>> query(String sql, Object... params) {
         try {
             if (client != null) {
                 DatabaseClient selected = useDatabaseOverride ? client.database(database) : client;
                 return selected.select(sql, params);
+            }
+            if (useDatabaseOverride) {
+                return DatabaseService.database(database).select(sql, params);
             }
             return DatabaseService.select(sql, params);
         } finally {
@@ -235,11 +245,14 @@ public final class JdbcScenarioProcess {
         }
     }
 
-    private static int update(String sql, Object... params) throws SQLException {
+    private static int update(String sql, Object... params) {
         try {
             if (client != null) {
                 DatabaseClient selected = useDatabaseOverride ? client.database(database) : client;
                 return selected.execute(sql, params);
+            }
+            if (useDatabaseOverride) {
+                return DatabaseService.database(database).execute(sql, params);
             }
             return DatabaseService.execute(sql, params);
         } finally {
@@ -381,12 +394,16 @@ public final class JdbcScenarioProcess {
             }
         }
 
-        private void assertConnectionsClosed() throws SQLException {
-            for (Connection connection : connections) {
-                assertTrue(connection.isClosed(), "A conexão deve ser fechada após cada operação.");
-            }
-            for (PreparedStatement statement : statements) {
-                assertTrue(statement.isClosed(), "O statement deve ser fechado após cada operação.");
+        private void assertConnectionsClosed() {
+            try {
+                for (Connection connection : connections) {
+                    assertTrue(connection.isClosed(), "A conexão deve ser fechada após cada operação.");
+                }
+                for (PreparedStatement statement : statements) {
+                    assertTrue(statement.isClosed(), "O statement deve ser fechado após cada operação.");
+                }
+            } catch (SQLException exception) {
+                throw new AssertionError("Não foi possível verificar o fechamento dos recursos JDBC.", exception);
             }
         }
 
@@ -418,7 +435,7 @@ public final class JdbcScenarioProcess {
 
         @Override
         public Logger getParentLogger() {
-            return Logger.getLogger("br.com.mindqa.database.test");
+            return Logger.getLogger("io.mindqa.database.test");
         }
     }
 }

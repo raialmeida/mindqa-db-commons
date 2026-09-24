@@ -1,4 +1,4 @@
-package br.com.mindqa.database;
+package io.mindqa.database;
 
 import java.net.URL;
 import java.net.URLClassLoader;

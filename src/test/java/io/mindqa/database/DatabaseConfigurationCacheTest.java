@@ -1,4 +1,4 @@
-package br.com.mindqa.database;
+package io.mindqa.database;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
