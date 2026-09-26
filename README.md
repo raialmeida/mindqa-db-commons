@@ -15,8 +15,8 @@ e cache de configuração podem ser habilitados separadamente.
 
 Documentação completa: [Wiki do GitHub](https://github.com/raialmeida/mindqa-db-commons/wiki).
 
-Funciona em automações java de API e integração. Pode ser usada com
-RestAssured, playwright, Selenium, Cucumber, JUnit ou TestNG. O código da biblioteca não depende
+Funciona em automações Java de API, interface e integração. Pode ser usada com
+RestAssured, Playwright, Selenium, Cucumber, JUnit ou TestNG. O código da biblioteca não depende
 desses frameworks; JUnit e H2 são usados somente nos testes do próprio projeto.
 
 - [Instalação](#instalação)
@@ -83,7 +83,9 @@ Importe `io.mindqa.database.DatabaseService`. `select` devolve uma lista de
 linhas; `execute` executa `INSERT`, `UPDATE` ou `DELETE` e devolve a quantidade
 de linhas afetadas. Os parâmetros substituem os placeholders `?` na ordem.
 
-Use os nomes ou aliases das colunas para acessar os valores do mapa.
+Use os nomes ou aliases das colunas para acessar os valores do mapa. O exemplo
+abaixo pressupõe um registro `cliente-1` com os dados esperados na tabela `clientes`.
+Coloque as instruções dentro de um método de teste.
 
 ```java
 import io.mindqa.database.DatabaseService;
@@ -107,7 +109,9 @@ assertEquals(1, removidos);
 ```
 
 Para outra base na conexão padrão, use `database(nome)` antes da operação. Para
-outra conexão, selecione o nome configurado com `connection(nome)`:
+outra conexão, selecione o nome configurado com `connection(nome)`. O exemplo
+seguinte pressupõe a conexão `financeiro` configurada e o registro preparado em
+cada base consultada ou alterada:
 
 ```java
 List<Map<String, Object>> auditoria = DatabaseService.database("qa_auditoria")
