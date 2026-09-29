@@ -211,7 +211,7 @@ aberturas físicas de conexões acontecem fora dos locks dos registros compartil
 normal da JVM também fecha os pools. Mudanças de credenciais criam pools distintos.
 
 HikariCP controla concorrência, limite e devolução das conexões. O nome exibido nos logs
-segue `<conexão>-<base>-<número>`; a configuração simples usa o motor normalizado
+segue `<conexão>-<base> pool-<número>`; a configuração simples usa o motor normalizado
 como nome da conexão. O número identifica a instância do pool no processo e não
 expõe credenciais. A chave interna do pool inclui
 nome, URL (com a base), propriedades JDBC, limites do pool e identidade do classloader.

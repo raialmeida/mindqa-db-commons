@@ -108,7 +108,7 @@ final class JdbcConnectionPools implements AutoCloseable {
                 : settings.connectionName();
         return sanitizePoolNamePart(connectionName)
                 + "-" + sanitizePoolNamePart(settings.databaseName())
-                + "-" + sequence;
+                + " pool-" + sequence;
     }
 
     private static String sanitizePoolNamePart(String value) {

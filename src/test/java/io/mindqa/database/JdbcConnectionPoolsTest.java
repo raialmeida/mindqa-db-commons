@@ -58,8 +58,8 @@ class JdbcConnectionPoolsTest {
     void numbersPoolInstancesSequentially() {
         JdbcConnectionSettings settings = settings(Map.of(), null);
 
-        assertEquals("postgresql-qa-1", pools.nextPoolName(settings));
-        assertEquals("postgresql-qa-2", pools.nextPoolName(settings));
+        assertEquals("postgresql-qa pool-1", pools.nextPoolName(settings));
+        assertEquals("postgresql-qa pool-2", pools.nextPoolName(settings));
     }
 
     @Test
@@ -72,7 +72,7 @@ class JdbcConnectionPoolsTest {
         JdbcConnectionSettings settings = JdbcConnectionSettings.from(
                 configuration.forConnection("principal"), "qa auditoria:2026");
 
-        assertEquals("principal-qa_auditoria_2026-1", pools.nextPoolName(settings));
+        assertEquals("principal-qa_auditoria_2026 pool-1", pools.nextPoolName(settings));
     }
 
     private final List<Connection> opened = new CopyOnWriteArrayList<>();
