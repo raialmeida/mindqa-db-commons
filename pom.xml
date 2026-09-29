@@ -6,7 +6,7 @@
 
     <groupId>io.github.raialmeida</groupId>
     <artifactId>mindqa-db-commons</artifactId>
-    <version>4.0.0</version>
+    <version>4.0.1</version>
     <packaging>jar</packaging>
     <name>MindQA DB Commons</name>
     <description>
@@ -55,7 +55,7 @@
         <hikaricp.version>7.1.0</hikaricp.version>
         <h2.version>2.5.250</h2.version>
         <maven.test.plugins.version>3.2.5</maven.test.plugins.version>
-        <project.build.outputTimestamp>2026-09-19T00:00:00Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-09-29T00:00:00Z</project.build.outputTimestamp>
     </properties>
 
     <dependencies>

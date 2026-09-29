@@ -43,6 +43,38 @@ class JdbcConnectionPoolsTest {
         assertFalse(configuration.poolEnabled());
     }
 
+    @Test
+    void usesSafeShutdownTimeoutWhenLoginTimeoutIsNotConfigured() {
+        assertEquals(5, JdbcConnectionPools.poolShutdownTimeoutSeconds(settings(Map.of(), null)));
+    }
+
+    @Test
+    void usesConfiguredLoginTimeoutDuringPoolShutdown() {
+        assertEquals(7, JdbcConnectionPools.poolShutdownTimeoutSeconds(
+                settings(Map.of("DB_LOGIN_TIMEOUT_SECONDS", "7"), null)));
+    }
+
+    @Test
+    void numbersPoolInstancesSequentially() {
+        JdbcConnectionSettings settings = settings(Map.of(), null);
+
+        assertEquals("postgresql-qa-1", pools.nextPoolName(settings));
+        assertEquals("postgresql-qa-2", pools.nextPoolName(settings));
+    }
+
+    @Test
+    void namesSelectedPoolWithConnectionAndDatabase() {
+        Properties properties = new Properties();
+        defaults().forEach((key, value) -> properties.setProperty(
+                "DB_CONNECTIONS_PRINCIPAL_" + key.substring(3), value));
+        DatabaseConfiguration configuration = new DatabaseConfiguration(properties, Map.of());
+
+        JdbcConnectionSettings settings = JdbcConnectionSettings.from(
+                configuration.forConnection("principal"), "qa auditoria:2026");
+
+        assertEquals("principal-qa_auditoria_2026-1", pools.nextPoolName(settings));
+    }
+
     private final List<Connection> opened = new CopyOnWriteArrayList<>();
     private final JdbcConnectionPools pools = new JdbcConnectionPools(this::connect);
 

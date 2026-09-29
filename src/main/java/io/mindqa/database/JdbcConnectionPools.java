@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 import javax.sql.DataSource;
@@ -23,6 +24,7 @@ final class JdbcConnectionPools implements AutoCloseable {
     private static final int MAX_POOLS = 32;
     private final Map<Key, HikariDataSource> pools = new HashMap<>();
     private final ConnectionFactory connections;
+    private final AtomicLong poolSequence = new AtomicLong();
 
     @FunctionalInterface
     interface ConnectionFactory {
@@ -81,6 +83,7 @@ final class JdbcConnectionPools implements AutoCloseable {
 
     private HikariDataSource create(JdbcConnectionSettings settings) {
         HikariConfig config = new HikariConfig();
+        config.setPoolName(nextPoolName(settings));
         config.setDataSource(new ConnectionSource(settings, connections));
         config.setMaximumPoolSize(settings.poolMaxSize());
         config.setMinimumIdle(0);
@@ -93,6 +96,27 @@ final class JdbcConnectionPools implements AutoCloseable {
         HikariDataSource pool = new HikariDataSource();
         config.copyStateTo(pool);
         return pool;
+    }
+
+    String nextPoolName(JdbcConnectionSettings settings) {
+        return poolName(settings, poolSequence.incrementAndGet());
+    }
+
+    private static String poolName(JdbcConnectionSettings settings, long sequence) {
+        String connectionName = settings.connectionName() == null
+                ? settings.databaseTypeName()
+                : settings.connectionName();
+        return sanitizePoolNamePart(connectionName)
+                + "-" + sanitizePoolNamePart(settings.databaseName())
+                + "-" + sequence;
+    }
+
+    private static String sanitizePoolNamePart(String value) {
+        return value.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    static int poolShutdownTimeoutSeconds(JdbcConnectionSettings settings) {
+        return settings.loginTimeoutSeconds() > 0 ? settings.loginTimeoutSeconds() : 5;
     }
 
     @Override
@@ -174,7 +198,7 @@ final class JdbcConnectionPools implements AutoCloseable {
 
         @Override
         public int getLoginTimeout() {
-            return 0;
+            return poolShutdownTimeoutSeconds(settings);
         }
 
         @Override

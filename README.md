@@ -35,7 +35,7 @@ ao projeto de automação:
 <dependency>
     <groupId>io.github.raialmeida</groupId>
     <artifactId>mindqa-db-commons</artifactId>
-    <version>4.0.0</version>
+    <version>4.0.1</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -45,9 +45,6 @@ dependências transitivas. RestAssured e o framework de testes devem ser
 declarados pelo projeto consumidor. Use a dependência sem `<scope>test</scope>`
 se precisar chamá-la em código de produção. Para Gradle e outros gerenciadores,
 consulte a página de [instalação e início rápido](https://github.com/raialmeida/mindqa-db-commons/wiki/Instala%C3%A7%C3%A3o-e-in%C3%ADcio-r%C3%A1pido).
-
-Enquanto a versão `4.0.0` não estiver disponível no Maven Central, execute
-`mvn clean install` neste repositório para usá-la no repositório Maven local.
 
 ## Início rápido
 

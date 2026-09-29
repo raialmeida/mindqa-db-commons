@@ -210,7 +210,10 @@ aberturas físicas de conexões acontecem fora dos locks dos registros compartil
 `closePools()` deve ser chamado após concluir as operações da suíte. O encerramento
 normal da JVM também fecha os pools. Mudanças de credenciais criam pools distintos.
 
-HikariCP controla concorrência, limite e devolução das conexões. A chave inclui
+HikariCP controla concorrência, limite e devolução das conexões. O nome exibido nos logs
+segue `<conexão>-<base>-<número>`; a configuração simples usa o motor normalizado
+como nome da conexão. O número identifica a instância do pool no processo e não
+expõe credenciais. A chave interna do pool inclui
 nome, URL (com a base), propriedades JDBC, limites do pool e identidade do classloader.
 O pool usa auto-commit e não oferece isolamento de alterações arbitrárias de sessão
 feitas por SQL. Os limites, padrões e exemplos estão no
@@ -226,6 +229,9 @@ O timeout de conexão usa a propriedade e a unidade de cada driver: `loginTimeou
 em segundos no SQL Server/PostgreSQL, `oracle.jdbc.loginTimeout` em segundos no
 Oracle e `connectTimeout` em milissegundos no MySQL. Neste último, o limite cobre
 a abertura do socket, não todo o handshake de autenticação.
+No encerramento do pool, o adaptador aguarda o `DB_LOGIN_TIMEOUT_SECONDS`
+configurado; quando esse valor é `0`, usa cinco segundos para permitir que as
+tarefas internas de criação de conexão terminem sem alterar o timeout do driver.
 
 ## Organização dos testes
 

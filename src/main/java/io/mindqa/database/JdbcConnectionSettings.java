@@ -120,8 +120,16 @@ final class JdbcConnectionSettings {
         return queryTimeoutSeconds;
     }
 
+    int loginTimeoutSeconds() {
+        return loginTimeoutSeconds;
+    }
+
     String connectionName() {
         return connectionName;
+    }
+
+    String databaseTypeName() {
+        return databaseType.name().toLowerCase(Locale.ROOT);
     }
 
     boolean poolEnabled() {
