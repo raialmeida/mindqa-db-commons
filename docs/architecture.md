@@ -20,7 +20,7 @@ O consumidor não instancia configurações, drivers ou executores. Falhas JDBC 
 expostas como `DatabaseException`, e a exceção original do driver permanece
 disponível como causa.
 
-O código de produção depende de JDBC e Apache DbUtils, sem acoplamento a RestAssured,
+O código de produção usa JDBC, os drivers dos quatro motores, Apache DbUtils e HikariCP, sem acoplamento a RestAssured,
 JUnit, TestNG, Cucumber ou ferramentas de interface. Pode ser usado em qualquer
 automação que execute Java 17+ e possua acesso ao banco configurado. As chamadas
 JDBC são síncronas; o framework consumidor define quando e em qual thread executá-las.
@@ -31,10 +31,10 @@ O projeto consumidor mantém suas dependências de RestAssured e JUnit e fornece
 as configurações do ambiente. Os métodos de banco não recebem o tipo de servidor;
 o driver é selecionado pelo tipo configurado para a conexão.
 
-No [exemplo de cadastro do README](../README.md#post-cadastrar-pela-api-e-validar-no-banco),
+No [exemplo de cadastro da Wiki](https://github.com/raialmeida/mindqa-db-commons/wiki/Validação-no-banco#restassured),
 RestAssured envia `POST /clientes` e valida HTTP `201`. O teste usa o ID retornado
 para consultar o cadastro com `DatabaseService.select`, compara os dados gravados
-com os enviados e demonstra a limpeza do registro com `execute`.
+com os enviados. A mesma página mostra a limpeza com `execute` no teardown de um teste.
 O cenário pressupõe que a API tenha concluído a gravação antes de responder e que
 a conexão do teste aponte para o mesmo banco da API.
 
@@ -57,7 +57,7 @@ não vazio substitui `DB_NAME` na operação, mantendo tipo, host, porta e crede
 A biblioteca não procura todos os arquivos `.properties` do consumidor. A convenção
 automática vale apenas para `database.properties`; a seleção explícita determina
 outros recursos usados em cada ambiente. Os caminhos, exemplos e
-valores padrão estão no [guia de configuração](../README.md#configuração-com-qualquer-arquivo-properties).
+valores padrão estão no [guia de configuração](https://github.com/raialmeida/mindqa-db-commons/wiki/Referência-de-configuração).
 
 ### Conexões nomeadas e escolha do padrão
 
@@ -91,8 +91,9 @@ entre propriedades e variáveis de ambiente seja unívoca.
 `connection(nome)` retorna um cliente imutável que guarda o nome da conexão;
 `database(databaseName)` devolve outro cliente imutável com a mesma conexão e a base escolhida.
 `DatabaseService.database(databaseName)` aplica essa seleção à conexão padrão. Esses métodos não
-abrem JDBC nem leem arquivos ao criar o cliente. A operação carrega uma configuração nova,
-portanto reutilizar o cliente continua observando alterações posteriores no arquivo.
+abrem JDBC nem leem arquivos ao criar o cliente. Sem cache, cada operação relê o arquivo.
+Com `DB_CONFIG_CACHE_ENABLED=true`, a configuração pode ser reutilizada; após editar
+o arquivo, chame `clearConfigurationCache()` para que a próxima operação o releia.
 O cliente padrão da fachada também não guarda configurações ou conexões.
 
 A forma `connection(nome).select(sql, params)` preserva as assinaturas existentes.
@@ -107,6 +108,8 @@ flowchart TD
     Service --> Client[DatabaseClient]
     Client --> Loader[DatabaseConfigurationLoader]
     Loader --> Configuration[DatabaseConfiguration]
+    Loader --> Cache[DatabaseConfigurationCache]
+    Client --> Pools[JdbcConnectionPools / HikariCP]
     Client --> Settings[JdbcConnectionSettings]
     Settings --> Configuration
     Client --> JDBC[JDBC e Apache DbUtils]
@@ -118,6 +121,7 @@ flowchart TD
 | --- | --- | --- |
 | `DatabaseService` | Expor operações na conexão padrão e criar clientes por nome. | Não guarda credenciais ou conexões JDBC. |
 | `DatabaseClient` | Validar argumentos, resolver a conexão e a base selecionadas e executar CRUD. | Guarda somente os nomes selecionados; fecha o JDBC após cada operação. |
+| `DatabaseException` | Expor falhas JDBC como exceção não verificada. | Preserva a mensagem e a exceção JDBC original como causa. |
 | `DatabaseConfigurationLoader` | Selecionar e ler o ambiente, o classpath e o arquivo externo. | Não abre conexões JDBC. |
 | `DatabaseConfiguration` | Preservar valores, selecionar o namespace da conexão e aplicar precedência. | Não executa I/O e não conhece os drivers. |
 | `JdbcConnectionSettings` | Validar as opções JDBC, aplicar padrões e montar a URL com escapes. | Não lê arquivos, altera estado global ou executa SQL. |
@@ -145,7 +149,7 @@ O código de produção fica em um único pacote funcional:
 `io.mindqa.database`. `DatabaseConfiguration`, `DatabaseConfigurationLoader`
 e `JdbcConnectionSettings` possuem acesso restrito a esse pacote. Essa fronteira
 impede que projetos consumidores dependam diretamente dos detalhes internos,
-conforme as [regras de acesso da linguagem Java](https://docs.oracle.com/javase/specs/jls/se11/html/jls-6.html#jls-6.6.1).
+conforme as [regras de acesso da linguagem Java](https://docs.oracle.com/javase/specs/jls/se17/html/jls-6.html#jls-6.6.1).
 
 Essa organização é adequada ao tamanho atual da biblioteca. Novos subpacotes
 devem corresponder a funcionalidades com responsabilidades e fronteiras próprias;
@@ -196,7 +200,7 @@ assinaturas e comportamento.
 3. A configuração resolve a conexão e os valores JDBC são validados, incluindo a base escolhida por `database()`.
 4. A chamada abre sua conexão e cria um `QueryRunner` com o timeout selecionado.
 5. A operação usa parâmetros preparados e fecha seus recursos.
-6. Em caso de falha JDBC, a exceção original do driver chega ao consumidor.
+6. Em caso de falha JDBC, o consumidor recebe `DatabaseException` com a exceção JDBC original como causa.
 
 Cada chamada possui uma conexão exclusiva durante sua execução e seu próprio executor.
 Não há transação compartilhada. Por padrão, o arquivo é relido e a conexão física é
@@ -217,7 +221,7 @@ expõe credenciais. A chave interna do pool inclui
 nome, URL (com a base), propriedades JDBC, limites do pool e identidade do classloader.
 O pool usa auto-commit e não oferece isolamento de alterações arbitrárias de sessão
 feitas por SQL. Os limites, padrões e exemplos estão no
-[README](../README.md#reutilização-opcional-de-conexões-e-configuração).
+[guia de pool e cache](https://github.com/raialmeida/mindqa-db-commons/wiki/Erros-e-solução-de-problemas#pool-de-conexões-e-cache).
 
 O auto-commit torna cada alteração independente. O dialecto SQL e os tipos dos
 valores de resultado seguem o driver selecionado. O código consumidor permanece

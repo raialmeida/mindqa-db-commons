@@ -15,13 +15,13 @@ e cache de configuração podem ser habilitados separadamente.
 
 Documentação completa: [Wiki do GitHub](https://github.com/raialmeida/mindqa-db-commons/wiki).
 
-Funciona em automações Java 17+ de API, interface e integração. Pode ser usada com
-RestAssured, Selenium, Cucumber, JUnit ou TestNG. O código da biblioteca não depende
+Funciona em automações Java de API, interface e integração. Pode ser usada com
+RestAssured, Playwright, Selenium, Cucumber, JUnit ou TestNG. O código da biblioteca não depende
 desses frameworks; JUnit e H2 são usados somente nos testes do próprio projeto.
 
 - [Instalação](#instalação)
 - [Início rápido](#início-rápido)
-- [API em uso](#api-em-uso)
+- [Métodos da biblioteca](#métodos-da-biblioteca)
 - [Documentation](#documentation)
 - [Desenvolvimento e testes](#desenvolvimento-e-testes)
 - [Como contribuir](#como-contribuir)
@@ -75,36 +75,52 @@ mvn test -Ddb.env=hml
 A configuração detalhada, inclusive conexões nomeadas, timeouts e opções dos
 drivers, está na [referência de configuração](https://github.com/raialmeida/mindqa-db-commons/wiki/Refer%C3%AAncia-de-configura%C3%A7%C3%A3o).
 
-## API em uso
+## Métodos da biblioteca
 
 Importe `io.mindqa.database.DatabaseService`. `select` devolve uma lista de
 linhas; `execute` executa `INSERT`, `UPDATE` ou `DELETE` e devolve a quantidade
 de linhas afetadas. Os parâmetros substituem os placeholders `?` na ordem.
+
+Use os nomes ou aliases das colunas para acessar os valores do mapa. O exemplo
+abaixo pressupõe um registro `cliente-1` com os dados esperados na tabela `clientes`.
+Coloque as instruções dentro de um método de teste.
 
 ```java
 import io.mindqa.database.DatabaseService;
 
 import java.util.List;
 import java.util.Map;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 String id = "cliente-1";
 List<Map<String, Object>> clientes = DatabaseService.select(
         "SELECT nome, email FROM clientes WHERE id = ?", id);
 
+assertEquals(1, clientes.size());
+assertEquals("Cliente QA", clientes.get(0).get("nome"));
+assertEquals("cliente@example.com", clientes.get(0).get("email"));
+
 int removidos = DatabaseService.execute(
         "DELETE FROM clientes WHERE id = ?", id);
+
+assertEquals(1, removidos);
 ```
 
 Para outra base na conexão padrão, use `database(nome)` antes da operação. Para
-outra conexão, selecione o nome configurado com `connection(nome)`:
+outra conexão, selecione o nome configurado com `connection(nome)`. O exemplo
+seguinte pressupõe a conexão `financeiro` configurada e o registro preparado em
+cada base consultada ou alterada:
 
 ```java
-DatabaseService.database("qa_auditoria")
+List<Map<String, Object>> auditoria = DatabaseService.database("qa_auditoria")
         .select("SELECT nome FROM clientes WHERE id = ?", id);
+assertEquals(1, auditoria.size());
+assertEquals("Cliente QA", auditoria.get(0).get("nome"));
 
-DatabaseService.connection("financeiro")
+int removidosFinanceiro = DatabaseService.connection("financeiro")
         .database("qa_clientes")
         .execute("DELETE FROM clientes WHERE id = ?", id);
+assertEquals(1, removidosFinanceiro);
 ```
 
 O cliente retornado por `connection(nome)` ou `database(nome)` pode ser reutilizado.
