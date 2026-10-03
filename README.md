@@ -42,8 +42,7 @@ ao projeto de automação:
 
 Os drivers JDBC de SQL Server, PostgreSQL, Oracle e MySQL são incluídos como
 dependências transitivas. RestAssured e o framework de testes devem ser
-declarados pelo projeto consumidor. Use a dependência sem `<scope>test</scope>`
-se precisar chamá-la em código de produção. Para Gradle e outros gerenciadores,
+declarados pelo projeto consumidor. Para Gradle e outros gerenciadores,
 consulte a página de [instalação e início rápido](https://github.com/raialmeida/mindqa-db-commons/wiki/Instala%C3%A7%C3%A3o-e-in%C3%ADcio-r%C3%A1pido).
 
 ## Início rápido
