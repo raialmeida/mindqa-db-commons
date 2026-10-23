@@ -1,9 +1,3 @@
-<p align="center">
-  <img src="docs/images/mindqa-db-commons-banner.png"
-       alt="MindQA DB Commons"
-       width="100%">
-</p>
-
 [![MvnRepository](https://badges.mvnrepository.com/badge/io.github.raialmeida/mindqa-db-commons/badge.svg?label=MvnRepository&color=green)](https://mvnrepository.com/artifact/io.github.raialmeida/mindqa-db-commons)
 [![Java CI](https://github.com/raialmeida/mindqa-db-commons/actions/workflows/ci.yml/badge.svg)](https://github.com/raialmeida/mindqa-db-commons/actions/workflows/ci.yml)
 
